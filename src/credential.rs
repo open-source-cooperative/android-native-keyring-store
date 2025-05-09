@@ -207,8 +207,9 @@ pub trait HasJavaVm {
         if env.exception_check()? {
             env.exception_describe()?;
             env.exception_clear()?;
-            if let Err(_e) = t_result {
-                // TODO log error
+            if let Err(e) = t_result {
+                tracing::warn!(%e, "Result::Err being converted into JavaExceptionThrown");
+                tracing::debug!(?e);
             }
             return Err(AndroidKeyringError::JavaExceptionThrow);
         }

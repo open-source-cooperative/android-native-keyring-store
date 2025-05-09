@@ -69,8 +69,9 @@ impl SharedPreferences {
 
         Ok(match BASE64_STANDARD.decode(&b64) {
             Ok(data) => Some(data),
-            Err(_e) => {
-                // TODO log error
+            Err(e) => {
+                tracing::error!(%e, "Error decoding base64 data, ignoring value");
+                tracing::debug!(?e, ?b64);
                 None
             }
         })

@@ -1,8 +1,8 @@
-use android_log_sys::{__android_log_write, LogPriority};
 use jni::{JNIEnv, objects::JObject};
 use shared_preferences::Context;
-use std::ffi::{CStr, CString};
 
+#[cfg(feature = "android-log")]
+pub mod android_log;
 pub mod cipher;
 pub mod credential;
 pub mod keystore;
@@ -10,19 +10,6 @@ pub mod methods;
 pub mod shared_preferences;
 #[cfg(feature = "compile_tests")]
 pub mod tests;
-
-fn log<T: ToString>(data: T) {
-    static TAG: &CStr = c"hello";
-    let msg = CString::new(data.to_string()).unwrap();
-
-    unsafe {
-        __android_log_write(LogPriority::DEBUG as i32, TAG.as_ptr(), msg.as_ptr());
-    }
-}
-
-fn logd<T: std::fmt::Debug>(data: T) {
-    log(format!("{data:?}"));
-}
 
 // package io.crates.keyring
 // import android.content.Context
@@ -43,8 +30,8 @@ pub extern "system" fn Java_io_crates_keyring_Keyring_00024Companion_setAndroidK
     let context = match Context::new(&env, context) {
         Ok(context) => context,
         Err(e) => {
-            log("error creating context");
-            logd(e);
+            tracing::error!(%e, "error converting context jobject into Context");
+            tracing::debug!(?e);
             return;
         }
     };
@@ -52,8 +39,8 @@ pub extern "system" fn Java_io_crates_keyring_Keyring_00024Companion_setAndroidK
     let builder = match credential::AndroidBuilder::new(env, context) {
         Ok(builder) => builder,
         Err(e) => {
-            log("error creating builder");
-            logd(e);
+            tracing::error!(%e, "error initialized AndroidBuilder credential builder");
+            tracing::debug!(?e);
             return;
         }
     };

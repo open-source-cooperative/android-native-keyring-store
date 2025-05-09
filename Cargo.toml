@@ -9,10 +9,13 @@ crate-type = ["cdylib"]
 [features]
 default = []
 compile_tests = []
+android-log = ["android_log-sys", "tracing-subscriber/env-filter"]
 
 [dependencies]
-android_log-sys = "0.3.2"
+android_log-sys = { version = "0.3.2", optional = true }
 base64 = "0.22.1"
 jni = "0.21.1"
 keyring = "=4.0.0-rc.1"
 thiserror = "2.0.12"
+tracing = "0.1.41"
+tracing-subscriber = { version = "0.3.19", optional = true }
