@@ -1,8 +1,6 @@
-use crate::{
-    JResult,
-    methods::{
-        ClassDecl, Constructible, FromValue, Method, NoParam, SignatureComp, StaticMethod, ToValue,
-    },
+use crate::methods::{
+    ClassDecl, Constructible, FromValue, JResult, Method, NoParam, SignatureComp, StaticMethod,
+    ToValue,
 };
 use jni::{
     JNIEnv,

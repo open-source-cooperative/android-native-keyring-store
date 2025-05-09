@@ -1,4 +1,3 @@
-use crate::{JResult, log, logd};
 use jni::{
     JNIEnv,
     objects::{GlobalRef, JByteArray, JObject, JValue, JValueGen, ReleaseMode},
@@ -108,13 +107,9 @@ pub trait Method {
 
     fn call(self_: &JObject, env: &mut JNIEnv, params: Self::Param) -> JResult<Self::Return> {
         let signature = make_signature(&Self::Param::signature(), Self::Return::signature());
-        log(format!("calling {}, sig={}", Self::NAME, signature));
-
         let param = params.as_param(env)?;
         let param = borrow_params(&param);
         let r = env.call_method(self_, Self::NAME, &signature, param.as_slice())?;
-
-        logd(&r);
 
         match r {
             JValueGen::Object(obj) if obj.is_null() => Ok(FromValue::from_null()?),
@@ -140,8 +135,6 @@ pub trait StaticMethod {
 
     fn call(self_: ClassDecl, env: &mut JNIEnv, params: Self::Param) -> JResult<Self::Return> {
         let signature = make_signature(&Self::Param::signature(), Self::Return::signature());
-        log(format!("calling {}, sig={}", Self::NAME, signature));
-
         let param = params.as_param(env)?;
         let param = borrow_params(&param);
         let r = env.call_static_method(
@@ -150,8 +143,6 @@ pub trait StaticMethod {
             &signature,
             param.as_slice(),
         )?;
-
-        logd(&r);
 
         match r {
             JValueGen::Object(obj) if obj.is_null() => Ok(FromValue::from_null()?),
@@ -175,17 +166,9 @@ pub trait Constructible {
 
     fn call_new(self_: ClassDecl, env: &mut JNIEnv, params: Self::Param) -> JResult<Self::Return> {
         let signature = make_signature(&Self::Param::signature(), <() as FromValue>::signature());
-        log(format!(
-            "calling new {}, sig={}",
-            std::any::type_name::<Self>(),
-            signature
-        ));
-
         let param = params.as_param(env)?;
         let param = borrow_params(&param);
         let obj = env.new_object(self_.for_finding(), &signature, param.as_slice())?;
-
-        logd(&obj);
 
         FromValue::from_object(env.new_global_ref(obj)?, env)
     }
@@ -253,6 +236,15 @@ impl AsParam for NoParam {
 pub trait ToValue: Sized {
     fn signature() -> SignatureComp;
     fn to_value<'a>(&self, env: &mut JNIEnv<'a>) -> JResult<JValueGen<JObject<'a>>>;
+}
+impl<T: ToValue> ToValue for &T {
+    fn signature() -> SignatureComp {
+        T::signature()
+    }
+
+    fn to_value<'a>(&self, env: &mut JNIEnv<'a>) -> JResult<JValueGen<JObject<'a>>> {
+        T::to_value(self, env)
+    }
 }
 impl<T: ToValue> ToValue for Option<T> {
     fn signature() -> SignatureComp {
@@ -452,3 +444,5 @@ fn borrow_params<'a, 'b>(
         })
         .collect()
 }
+
+pub type JResult<T> = Result<T, jni::errors::Error>;

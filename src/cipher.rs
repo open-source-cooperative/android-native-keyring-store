@@ -1,8 +1,8 @@
 use crate::{
-    JResult,
     keystore::Key,
     methods::{
-        ClassDecl, Constructible, FromValue, Method, NoParam, SignatureComp, StaticMethod, ToValue,
+        ClassDecl, Constructible, FromValue, JResult, Method, NoParam, SignatureComp, StaticMethod,
+        ToValue,
     },
 };
 use jni::{
@@ -39,13 +39,13 @@ impl Cipher {
         ThisMethod::call(Self::class(), env, transformation)
     }
 
-    pub fn init(&self, env: &mut JNIEnv, mode: i32, key: Key) -> JResult<()> {
-        struct ThisMethod;
-        impl Method for ThisMethod {
-            type Param = (i32, Key);
+    pub fn init(&self, env: &mut JNIEnv, mode: i32, key: &Key) -> JResult<()> {
+        struct ThisMethod<'a>(PhantomData<&'a ()>);
+        impl<'a> Method for ThisMethod<'a> {
+            type Param = (i32, &'a Key);
             type Return = ();
 
-            const NAME: &str = "init";
+            const NAME: &'static str = "init";
         }
 
         ThisMethod::call(&self.self_, env, (mode, key))
@@ -55,15 +55,15 @@ impl Cipher {
         &self,
         env: &mut JNIEnv,
         mode: i32,
-        key: Key,
+        key: &Key,
         spec: AlgorithmParameterSpec,
     ) -> JResult<()> {
-        struct ThisMethod;
-        impl Method for ThisMethod {
-            type Param = (i32, Key, AlgorithmParameterSpec);
+        struct ThisMethod<'a>(PhantomData<&'a ()>);
+        impl<'a> Method for ThisMethod<'a> {
+            type Param = (i32, &'a Key, AlgorithmParameterSpec);
             type Return = ();
 
-            const NAME: &str = "init";
+            const NAME: &'static str = "init";
         }
         ThisMethod::call(&self.self_, env, (mode, key, spec))
     }

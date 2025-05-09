@@ -1,7 +1,4 @@
-use crate::{
-    JResult, log, logd,
-    methods::{ClassDecl, FromValue, Method, NoParam, SignatureComp},
-};
+use crate::methods::{ClassDecl, FromValue, JResult, Method, NoParam, SignatureComp};
 use base64::{Engine, prelude::BASE64_STANDARD};
 use jni::{
     JNIEnv,
@@ -72,10 +69,8 @@ impl SharedPreferences {
 
         Ok(match BASE64_STANDARD.decode(&b64) {
             Ok(data) => Some(data),
-            Err(e) => {
-                log(format!("bad base64 on key {key:?}, ignoring"));
-                logd(e);
-                logd(b64);
+            Err(_e) => {
+                // TODO log error
                 None
             }
         })
@@ -124,6 +119,17 @@ impl SharedPreferencesEditor {
     pub fn put_binary(&self, env: &mut JNIEnv, key: &str, value: &[u8]) -> JResult<Self> {
         let value = BASE64_STANDARD.encode(value);
         self.put_string(env, key, &value)
+    }
+
+    pub fn remove(&self, env: &mut JNIEnv, key: &str) -> JResult<Self> {
+        struct ThisMethod<'a>(PhantomData<&'a ()>);
+        impl<'a> Method for ThisMethod<'a> {
+            type Param = &'a str;
+            type Return = SharedPreferencesEditor;
+
+            const NAME: &'static str = "remove";
+        }
+        ThisMethod::call(&self.self_, env, key)
     }
 
     pub fn commit(&self, env: &mut JNIEnv) -> JResult<bool> {
