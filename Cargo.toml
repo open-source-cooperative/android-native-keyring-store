@@ -1,0 +1,12 @@
+[package]
+name = "android-keyring"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+android_log-sys = "0.3.2"
+base64 = "0.22.1"
+jni = "0.21.1"
