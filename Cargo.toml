@@ -1,7 +1,14 @@
 [package]
+authors = ["André Puel <andrepuel@gmail.com>"]
+description = "Android CredentialBuilder for keyring crate"
+homepage = "https://github.com/Andrepuel/android-keyring"
+keywords = ["password", "credential", "keychain", "android", "keystore"]
+license = "MIT"
 name = "android-keyring"
+repository = "https://github.com/Andrepuel/android-keyring.git"
 version = "0.1.0"
 edition = "2024"
+readme = "README.md"
 
 [lib]
 crate-type = ["cdylib"]
