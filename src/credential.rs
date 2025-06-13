@@ -26,7 +26,7 @@ pub struct AndroidBuilder {
     context: Context,
 }
 impl AndroidBuilder {
-    pub fn new(env: JNIEnv, context: Context) -> AndroidKeyringResult<Self> {
+    pub fn new(env: &JNIEnv, context: Context) -> AndroidKeyringResult<Self> {
         let java_vm = env.get_java_vm()?;
         Ok(Self { java_vm, context })
     }

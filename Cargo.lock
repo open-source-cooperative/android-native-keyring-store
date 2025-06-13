@@ -24,12 +24,13 @@ dependencies = [
 
 [[package]]
 name = "android-keyring"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "android_log-sys",
  "base64",
  "jni",
  "keyring",
+ "ndk-context",
  "thiserror 2.0.12",
  "tracing",
  "tracing-subscriber",
@@ -367,6 +368,12 @@ name = "memchr"
 version = "2.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "78ca9ab1a0babb1e7d5695e3530886289c18cf2f87ec19a575a0abdce112e3a3"
+
+[[package]]
+name = "ndk-context"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "27b02d87554356db9e9a873add8782d4ea6e3e58ea071a9adb9a2e8ddb884a8b"
 
 [[package]]
 name = "nu-ansi-term"
