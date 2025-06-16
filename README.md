@@ -4,16 +4,34 @@ Pure Rust integration of Android's `KeyStore` and Android's `SharedPreferences`
 with crate [keyring](https://crates.io/crates/keyring).
 
 The Java API is called by using JNI, so no actual Java code needs to be inserted
-in the end project. Only the initialization function as an instance of
-`android.content.Context` is needed in order to fetch a `SharedPreferences`
-instance.
+in the project.
 
 ## Experimental
 
 This project should not be deemed mature enough for production level or
 sensitive applications.
 
-# Activating Android Keyring
+# Initialization
+
+There are two options for setting Android Keyring as the default entry builder
+for `keyring-rs`.
+
+## `ndk-context` (Recommended)
+
+This option is the recommended option and works out of box for projects that do
+setup `ndk-context`, (e.g., Dioxus Mobile, Tauri Mobile and android-activity).
+
+Invoke the initialization function once on the startup of the project:
+
+```rust
+android_keyring::set_android_keyring_credential_builder().unwrap();
+```
+
+# Manual initialization through Java/Kotlin Code
+
+If the project does not support `ndk-context` (e.g. Flutter/FRB), then
+Java/Kotlin code must be inserted into the project so that the Andorid Keyring
+application has access to the JNI context and the Android's Activity context.
 
 Insert the following Kotlin code into your Android project:
 
