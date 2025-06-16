@@ -26,6 +26,23 @@ pub struct AndroidBuilder {
     context: Context,
 }
 impl AndroidBuilder {
+    /// Initializes AndroidBuilder using the JNI context available
+    /// on the `ndk-context` crate.
+    #[cfg(feature = "ndk-context")]
+    pub fn from_ndk_context() -> AndroidKeyringResult<Self> {
+        let ctx = ndk_context::android_context();
+        let vm = ctx.vm().cast();
+        let activity = ctx.context();
+
+        let java_vm = unsafe { jni::JavaVM::from_raw(vm)? };
+        let env = java_vm.attach_current_thread()?;
+
+        let context = unsafe { jni::objects::JObject::from_raw(activity as jni::sys::jobject) };
+        let context = Context::new(&env, context)?;
+
+        Self::new(&env, context)
+    }
+
     pub fn new(env: &JNIEnv, context: Context) -> AndroidKeyringResult<Self> {
         let java_vm = env.get_java_vm()?;
         Ok(Self { java_vm, context })

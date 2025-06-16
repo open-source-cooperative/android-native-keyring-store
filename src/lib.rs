@@ -1,9 +1,6 @@
 use jni::{JNIEnv, objects::JObject};
 use shared_preferences::Context;
 
-#[cfg(feature = "rust-init")]
-use crate::credential::AndroidKeyringError;
-
 #[cfg(feature = "android-log")]
 pub mod android_log;
 pub mod cipher;
@@ -52,23 +49,12 @@ pub extern "system" fn Java_io_crates_keyring_Keyring_00024Companion_setAndroidK
 }
 
 /// Initializes the android-keyring from pure Rust (no Java call needed).
-/// Requires the `rust-init` feature.
-#[cfg(feature = "rust-init")]
-pub fn set_android_keyring_credential_builder() -> Result<(), AndroidKeyringError> {
-    use crate::credential::AndroidBuilder;
-
-    let ctx = ndk_context::android_context();
-    let vm = ctx.vm().cast();
-    let activity = ctx.context();
-
-    let java_vm = unsafe { jni::JavaVM::from_raw(vm)? };
-    let env = java_vm.attach_current_thread()?;
-    let context = unsafe { JObject::from_raw(activity as jni::sys::jobject) };
-
-    let android_ctx = Context::new(&env, context)?;
-    let builder = AndroidBuilder::new(&env, android_ctx)?;
-
-    keyring::set_default_credential_builder(Box::new(builder));
+/// Requires the `ndk-context` feature.
+#[cfg(feature = "ndk-context")]
+pub fn set_android_keyring_credential_builder() -> Result<(), credential::AndroidKeyringError> {
+    keyring::set_default_credential_builder(Box::new(
+        credential::AndroidBuilder::from_ndk_context()?,
+    ));
 
     Ok(())
 }

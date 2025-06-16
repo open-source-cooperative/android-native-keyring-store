@@ -14,10 +14,9 @@ readme = "README.md"
 crate-type = ["lib", "cdylib"]
 
 [features]
-default = []
+default = ["ndk-context"]
 compile_tests = []
 android-log = ["android_log-sys", "tracing-subscriber/env-filter"]
-rust-init = ["ndk-context"]
 
 [dependencies]
 android_log-sys = { version = "0.3.2", optional = true }
