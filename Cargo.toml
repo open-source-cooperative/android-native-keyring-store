@@ -6,7 +6,7 @@ keywords = ["password", "credential", "keychain", "android", "keystore"]
 license = "MIT"
 name = "android-keyring"
 repository = "https://github.com/Andrepuel/android-keyring.git"
-version = "0.1.2"
+version = "0.2.0"
 edition = "2024"
 readme = "README.md"
 
@@ -22,7 +22,7 @@ android-log = ["android_log-sys", "tracing-subscriber/env-filter"]
 android_log-sys = { version = "0.3.2", optional = true }
 base64 = "0.22.1"
 jni = "0.21.1"
-keyring = "=4.0.0-rc.1"
+keyring = "3.6"
 thiserror = "2.0.12"
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.19", optional = true }
