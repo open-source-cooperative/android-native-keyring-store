@@ -19,15 +19,15 @@ for `keyring-rs`.
 ## `ndk-context` (Recommended)
 
 This option is the recommended option and works out of box for projects that do
-setup `ndk-context`, (e.g., Dioxus Mobile, Tauri Mobile and android-activity).
+setup `ndk-context`, e.g., Dioxus Mobile, Tauri Mobile and android-activity.
 
 Invoke the initialization function once on the startup of the project:
 
 ```rust
-android_keyring::set_android_keyring_credential_builder().unwrap();
+keyring_core::set_default_store(android_native_keyring_store::AndroidStore::from_ndk_context().unwrap());
 ```
 
-# Manual initialization through Java/Kotlin Code
+## Manual initialization through Java/Kotlin Code
 
 If the project does not support `ndk-context` (e.g. Flutter/FRB), then
 Java/Kotlin code must be inserted into the project so that the Andorid Keyring
@@ -41,7 +41,7 @@ Insert the following Kotlin code into your Android project:
         companion object {
             init {
                 // See Note 1
-                System.loadLibrary("android_keyring")
+                System.loadLibrary("android_native_keyring_store")
             }
 
             external fun setAndroidKeyringCredentialBuilder(context: Context);
@@ -56,6 +56,6 @@ From your main activity, initialize the credential builder, e.g:
 
         Keyring.setAndroidKeyringCredentialBuilder(this);
 
-Note 1: This code expects that a library file `libandroid_keyring.so` was
+Note 1: This code expects that a library file `libandroid_native_keyring_store.so` was
 compiled with the contents of this package. Depending on how the project is
 managed, the library loading may need to be adjusted or not needed at all.

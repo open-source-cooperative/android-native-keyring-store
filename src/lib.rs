@@ -1,6 +1,3 @@
-use jni::{JNIEnv, objects::JObject};
-use shared_preferences::Context;
-
 #[cfg(feature = "android-log")]
 pub mod android_log;
 pub mod cipher;
@@ -10,6 +7,11 @@ pub mod methods;
 pub mod shared_preferences;
 #[cfg(feature = "compile_tests")]
 pub mod tests;
+
+use jni::{JNIEnv, objects::JObject};
+use shared_preferences::Context;
+
+pub use credential::AndroidStore;
 
 // package io.crates.keyring
 // import android.content.Context
@@ -36,7 +38,7 @@ pub extern "system" fn Java_io_crates_keyring_Keyring_00024Companion_setAndroidK
         }
     };
 
-    let builder = match credential::AndroidBuilder::new(&env, context) {
+    let builder = match AndroidStore::new(&env, context) {
         Ok(builder) => builder,
         Err(e) => {
             tracing::error!(%e, "error initialized AndroidBuilder credential builder");
@@ -45,16 +47,14 @@ pub extern "system" fn Java_io_crates_keyring_Keyring_00024Companion_setAndroidK
         }
     };
 
-    keyring::set_default_credential_builder(Box::new(builder));
+    keyring_core::set_default_store(builder);
 }
 
 /// Initializes the android-keyring from pure Rust (no Java call needed).
 /// Requires the `ndk-context` feature.
 #[cfg(feature = "ndk-context")]
 pub fn set_android_keyring_credential_builder() -> Result<(), credential::AndroidKeyringError> {
-    keyring::set_default_credential_builder(Box::new(
-        credential::AndroidBuilder::from_ndk_context()?,
-    ));
+    keyring_core::set_default_store(AndroidStore::from_ndk_context()?);
 
     Ok(())
 }

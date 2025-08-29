@@ -1,12 +1,12 @@
 [package]
 authors = ["André Puel <andrepuel@gmail.com>"]
-description = "Android CredentialBuilder for keyring crate"
-homepage = "https://github.com/Andrepuel/android-keyring"
+description = "Android CredentialStore for keyring-core"
+homepage = "https://github.com/open-source-cooperative/android-native-keyring-store"
 keywords = ["password", "credential", "keychain", "android", "keystore"]
 license = "MIT"
-name = "android-keyring"
-repository = "https://github.com/Andrepuel/android-keyring.git"
-version = "0.2.0"
+name = "android-native-keyring-store"
+repository = "https://github.com/open-source-cooperative/android-native-keyring-store.git"
+version = "0.3.0"
 edition = "2024"
 readme = "README.md"
 
@@ -15,14 +15,14 @@ crate-type = ["lib", "cdylib"]
 
 [features]
 default = ["ndk-context"]
-compile_tests = []
+compile_tests = ["android_log-sys"]
 android-log = ["android_log-sys", "tracing-subscriber/env-filter"]
 
 [dependencies]
 android_log-sys = { version = "0.3.2", optional = true }
 base64 = "0.22.1"
 jni = "0.21.1"
-keyring = "3.6"
+keyring-core = "0.5.0"
 thiserror = "2.0.12"
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.19", optional = true }

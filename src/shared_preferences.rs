@@ -32,6 +32,10 @@ impl Context {
 
         ThisMethod::call(&self.self_, env, (name, mode))
     }
+
+    pub fn id(&self) -> usize {
+        self.self_.as_raw() as usize
+    }
 }
 
 pub struct SharedPreferences {

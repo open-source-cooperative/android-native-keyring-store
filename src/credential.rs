@@ -4,11 +4,14 @@ use crate::{
     shared_preferences::{Context, SharedPreferences},
 };
 use jni::{JNIEnv, JavaVM};
-use keyring::{
-    Credential,
-    credential::{CredentialApi, CredentialBuilderApi},
+use keyring_core::{
+    Credential, Entry,
+    api::{CredentialApi, CredentialStoreApi},
 };
-use std::sync::Mutex;
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 
 pub const KEY_ALGORITHM_AES: &str = "AES";
 pub const PROVIDER: &str = "AndroidKeyStore";
@@ -21,15 +24,15 @@ pub const ENCRYPT_MODE: i32 = 1;
 pub const DECRYPT_MODE: i32 = 2;
 pub const CIPHER_TRANSFORMATION: &str = "AES/GCM/NoPadding";
 
-pub struct AndroidBuilder {
+pub struct AndroidStore {
     java_vm: JavaVM,
     context: Context,
 }
-impl AndroidBuilder {
+impl AndroidStore {
     /// Initializes AndroidBuilder using the JNI context available
     /// on the `ndk-context` crate.
     #[cfg(feature = "ndk-context")]
-    pub fn from_ndk_context() -> AndroidKeyringResult<Self> {
+    pub fn from_ndk_context() -> AndroidKeyringResult<Arc<Self>> {
         let ctx = ndk_context::android_context();
         let vm = ctx.vm().cast();
         let activity = ctx.context();
@@ -43,22 +46,34 @@ impl AndroidBuilder {
         Self::new(&env, context)
     }
 
-    pub fn new(env: &JNIEnv, context: Context) -> AndroidKeyringResult<Self> {
+    pub fn new(env: &JNIEnv, context: Context) -> AndroidKeyringResult<Arc<Self>> {
         let java_vm = env.get_java_vm()?;
-        Ok(Self { java_vm, context })
+        Ok(Arc::new(Self { java_vm, context }))
     }
 }
-impl CredentialBuilderApi for AndroidBuilder {
+impl CredentialStoreApi for AndroidStore {
+    fn vendor(&self) -> String {
+        "SharedPreferences/KeyStore, https://github.com/open-source-cooperative/android-native-keyring-store".to_string()
+    }
+
+    fn id(&self) -> String {
+        format!(
+            "Version {}, context {}",
+            env!("CARGO_PKG_VERSION"),
+            self.context.id()
+        )
+    }
+
     fn build(
         &self,
-        _target: Option<&str>,
         service: &str,
         user: &str,
-    ) -> keyring::Result<Box<Credential>> {
+        _modifiers: Option<&HashMap<&str, &str>>,
+    ) -> keyring_core::Result<Entry> {
         let credential = self
             .check_for_exception(|env| AndroidCredential::new(env, &self.context, service, user))?;
 
-        Ok(Box::new(credential))
+        Ok(Entry::new_with_credential(Arc::new(credential)))
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
@@ -70,6 +85,7 @@ pub struct AndroidCredential {
     java_vm: JavaVM,
     key: Key,
     file: SharedPreferences,
+    service: String,
     user: String,
 }
 impl AndroidCredential {
@@ -91,6 +107,7 @@ impl AndroidCredential {
             java_vm,
             key,
             file,
+            service: service.to_owned(),
             user: user.to_owned(),
         })
     }
@@ -128,16 +145,12 @@ impl AndroidCredential {
     }
 }
 impl CredentialApi for AndroidCredential {
-    fn set_password(&self, password: &str) -> keyring::Result<()> {
-        self.set_secret(password.as_bytes())
-    }
-
-    fn set_secret(&self, password: &[u8]) -> keyring::Result<()> {
+    fn set_secret(&self, secret: &[u8]) -> keyring_core::Result<()> {
         self.check_for_exception(|env| {
             let cipher = Cipher::get_instance(env, CIPHER_TRANSFORMATION)?;
             cipher.init(env, ENCRYPT_MODE, &self.key)?;
             let iv = cipher.get_iv(env)?;
-            let ciphertext = cipher.do_final(env, password)?;
+            let ciphertext = cipher.do_final(env, secret)?;
 
             let iv_len = iv.len() as u8;
 
@@ -154,15 +167,7 @@ impl CredentialApi for AndroidCredential {
         Ok(())
     }
 
-    fn get_password(&self) -> keyring::Result<String> {
-        let secret = self.get_secret()?;
-        match String::from_utf8(secret) {
-            Ok(str) => Ok(str),
-            Err(e) => Err(keyring::Error::BadEncoding(e.into_bytes())),
-        }
-    }
-
-    fn get_secret(&self) -> keyring::Result<Vec<u8>> {
+    fn get_secret(&self) -> keyring_core::Result<Vec<u8>> {
         let r = self.check_for_exception(|env| {
             let ciphertext = self.file.get_binary(env, &self.user)?;
             Ok(match ciphertext {
@@ -193,11 +198,11 @@ impl CredentialApi for AndroidCredential {
 
         match r {
             Some(r) => Ok(r),
-            None => Err(keyring::Error::NoEntry),
+            None => Err(keyring_core::Error::NoEntry),
         }
     }
 
-    fn delete_credential(&self) -> keyring::Result<()> {
+    fn delete_credential(&self) -> keyring_core::Result<()> {
         self.check_for_exception(|env| {
             let edit = self.file.edit(env)?;
             edit.remove(env, &self.user)?.commit(env)?;
@@ -205,6 +210,15 @@ impl CredentialApi for AndroidCredential {
         })?;
 
         Ok(())
+    }
+
+    fn get_credential(&self) -> keyring_core::Result<Option<Arc<Credential>>> {
+        self.get_secret()?;
+        Ok(None)
+    }
+
+    fn get_specifiers(&self) -> Option<(String, String)> {
+        Some((self.service.clone(), self.user.clone()))
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
@@ -234,7 +248,7 @@ pub trait HasJavaVm {
         t_result
     }
 }
-impl HasJavaVm for AndroidBuilder {
+impl HasJavaVm for AndroidStore {
     fn java_vm(&self) -> &JavaVM {
         &self.java_vm
     }
@@ -254,7 +268,7 @@ pub enum AndroidKeyringError {
     #[error("Corrupted data in SharedPreferences")]
     CorruptedData,
 }
-impl From<AndroidKeyringError> for keyring::Error {
+impl From<AndroidKeyringError> for keyring_core::Error {
     fn from(value: AndroidKeyringError) -> Self {
         Self::PlatformFailure(Box::new(value))
     }

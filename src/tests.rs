@@ -1,5 +1,3 @@
-use std::ffi::CString;
-
 use crate::{
     credential::{
         BLOCK_MODE_GCM, ENCRYPTION_PADDING_NONE, KEY_ALGORITHM_AES, PROVIDER, PURPOSE_DECRYPT,
@@ -9,7 +7,8 @@ use crate::{
 };
 use android_log_sys::{__android_log_write, LogPriority};
 use jni::{JNIEnv, JavaVM, objects::JObject};
-use keyring::Entry;
+use keyring_core::Entry;
+use std::ffi::CString;
 
 // package io.crates.keyring
 // import android.content.Context
@@ -59,11 +58,11 @@ fn golden_path(_vm: JavaVM) {
     entry1.set_password("test").unwrap();
     assert_eq!(entry1.get_password().unwrap(), "test");
     match entry2.get_password() {
-        Err(keyring::Error::NoEntry) => {}
+        Err(keyring_core::Error::NoEntry) => {}
         x => panic!("unexpected result on entry2 get_password(): {x:?}"),
     };
     match entry3.get_password() {
-        Err(keyring::Error::NoEntry) => {}
+        Err(keyring_core::Error::NoEntry) => {}
         x => panic!("unexpected result on entry3 get_password(): {x:?}"),
     };
 
@@ -103,13 +102,13 @@ fn corrupted_entry(vm: JavaVM) {
     }
 
     match entry1.get_password() {
-        Err(keyring::Error::PlatformFailure(_)) => (),
+        Err(keyring_core::Error::PlatformFailure(_)) => (),
         x => panic!("unexpected result on corrupted get_password(): {x:?}"),
     }
 
     let entry1 = Entry::new("corrupted", "myuser").expect("Entry::new");
     match entry1.get_password() {
-        Err(keyring::Error::PlatformFailure(_)) => (),
+        Err(keyring_core::Error::PlatformFailure(_)) => (),
         x => panic!("unexpected result on corrupted get_password(): {x:?}"),
     }
 
