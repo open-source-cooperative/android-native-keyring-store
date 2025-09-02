@@ -6,6 +6,7 @@ use jni::{
 };
 use std::marker::PhantomData;
 
+#[derive(Clone)]
 pub struct Context {
     self_: GlobalRef,
 }

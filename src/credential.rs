@@ -25,7 +25,7 @@ pub const DECRYPT_MODE: i32 = 2;
 pub const CIPHER_TRANSFORMATION: &str = "AES/GCM/NoPadding";
 
 pub struct AndroidStore {
-    java_vm: JavaVM,
+    java_vm: Arc<JavaVM>,
     context: Context,
 }
 impl AndroidStore {
@@ -47,7 +47,7 @@ impl AndroidStore {
     }
 
     pub fn new(env: &JNIEnv, context: Context) -> AndroidKeyringResult<Arc<Self>> {
-        let java_vm = env.get_java_vm()?;
+        let java_vm = Arc::new(env.get_java_vm()?);
         Ok(Arc::new(Self { java_vm, context }))
     }
 }
@@ -70,8 +70,8 @@ impl CredentialStoreApi for AndroidStore {
         user: &str,
         _modifiers: Option<&HashMap<&str, &str>>,
     ) -> keyring_core::Result<Entry> {
-        let credential = self
-            .check_for_exception(|env| AndroidCredential::new(env, &self.context, service, user))?;
+        let credential =
+            AndroidCredential::new(self.java_vm.clone(), self.context.clone(), service, user);
 
         Ok(Entry::new_with_credential(Arc::new(credential)))
     }
@@ -82,37 +82,25 @@ impl CredentialStoreApi for AndroidStore {
 }
 
 pub struct AndroidCredential {
-    java_vm: JavaVM,
-    key: Key,
-    file: SharedPreferences,
+    java_vm: Arc<JavaVM>,
+    context: Context,
     service: String,
     user: String,
 }
 impl AndroidCredential {
-    pub fn new(
-        env: &mut JNIEnv,
-        context: &Context,
-        service: &str,
-        user: &str,
-    ) -> AndroidKeyringResult<Self> {
-        let java_vm = env.get_java_vm()?;
-        let key = {
-            static SERVICE_LOCK: Mutex<()> = Mutex::new(());
-            let _lock = SERVICE_LOCK.lock().unwrap();
-            Self::get_key(env, service)?
-        };
-        let file = Self::get_file(env, context, service)?;
-
-        Ok(Self {
+    pub fn new(java_vm: Arc<JavaVM>, context: Context, service: &str, user: &str) -> Self {
+        Self {
             java_vm,
-            key,
-            file,
+            context,
             service: service.to_owned(),
             user: user.to_owned(),
-        })
+        }
     }
 
     fn get_key(env: &mut JNIEnv, service: &str) -> AndroidKeyringResult<Key> {
+        static SERVICE_LOCK: Mutex<()> = Mutex::new(());
+        let _lock = SERVICE_LOCK.lock().unwrap();
+
         let keystore = KeyStore::get_instance(env, PROVIDER)?;
         keystore.load(env)?;
 
@@ -147,14 +135,17 @@ impl AndroidCredential {
 impl CredentialApi for AndroidCredential {
     fn set_secret(&self, secret: &[u8]) -> keyring_core::Result<()> {
         self.check_for_exception(|env| {
+            let file = Self::get_file(env, &self.context, &self.service)?;
+            let key = Self::get_key(env, &self.service)?;
+
             let cipher = Cipher::get_instance(env, CIPHER_TRANSFORMATION)?;
-            cipher.init(env, ENCRYPT_MODE, &self.key)?;
+            cipher.init(env, ENCRYPT_MODE, &key)?;
             let iv = cipher.get_iv(env)?;
             let ciphertext = cipher.do_final(env, secret)?;
 
             let iv_len = iv.len() as u8;
 
-            let edit = self.file.edit(env)?;
+            let edit = file.edit(env)?;
             let mut value = vec![iv_len];
             value.extend_from_slice(&iv);
             value.extend_from_slice(&ciphertext);
@@ -169,7 +160,10 @@ impl CredentialApi for AndroidCredential {
 
     fn get_secret(&self) -> keyring_core::Result<Vec<u8>> {
         let r = self.check_for_exception(|env| {
-            let ciphertext = self.file.get_binary(env, &self.user)?;
+            let file = Self::get_file(env, &self.context, &self.service)?;
+            let key = Self::get_key(env, &self.service)?;
+            let ciphertext = file.get_binary(env, &self.user)?;
+
             Ok(match ciphertext {
                 Some(ciphertext) => {
                     if ciphertext.is_empty() {
@@ -187,7 +181,7 @@ impl CredentialApi for AndroidCredential {
 
                     let spec = GCMParameterSpec::new(env, 128, iv)?;
                     let cipher = Cipher::get_instance(env, CIPHER_TRANSFORMATION)?;
-                    cipher.init2(env, DECRYPT_MODE, &self.key, spec.into())?;
+                    cipher.init2(env, DECRYPT_MODE, &key, spec.into())?;
                     let plaintext = cipher.do_final(env, ciphertext)?;
 
                     Some(plaintext)
@@ -204,8 +198,10 @@ impl CredentialApi for AndroidCredential {
 
     fn delete_credential(&self) -> keyring_core::Result<()> {
         self.check_for_exception(|env| {
-            let edit = self.file.edit(env)?;
+            let file = Self::get_file(env, &self.context, &self.service)?;
+            let edit = file.edit(env)?;
             edit.remove(env, &self.user)?.commit(env)?;
+            edit.commit(env)?;
             Ok(())
         })?;
 

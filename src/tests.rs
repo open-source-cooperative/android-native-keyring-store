@@ -24,6 +24,7 @@ pub extern "system" fn Java_io_crates_keyring_KeyringTests_00024Companion_runTes
 ) {
     let testing = [
         ("golden_path", golden_path as fn(JavaVM)),
+        ("delete_credential", delete_credential),
         ("corrupted_entry", corrupted_entry),
         ("concurrent_access", concurrent_access),
     ]
@@ -35,14 +36,24 @@ pub extern "system" fn Java_io_crates_keyring_KeyringTests_00024Companion_runTes
     .collect::<Vec<_>>();
 
     for (name, testing) in testing {
-        if let Err(e) = testing.join() {
-            let error = e.downcast_ref::<String>();
-            let msg = format!("{name} error: {error:?}");
-            let msg = CString::new(msg).unwrap();
-            let tag = c"unit-test";
-            unsafe {
-                __android_log_write(LogPriority::ERROR as i32, tag.as_ptr(), msg.as_ptr());
+        let level;
+        let msg;
+        match testing.join() {
+            Ok(()) => {
+                level = LogPriority::INFO as i32;
+                msg = format!("{name} success");
             }
+            Err(e) => {
+                let error = e.downcast_ref::<String>();
+                level = LogPriority::ERROR as i32;
+                msg = format!("{name} error: {error:?}");
+            }
+        }
+
+        let msg = CString::new(msg).unwrap();
+        let tag = c"unit-test";
+        unsafe {
+            __android_log_write(level, tag.as_ptr(), msg.as_ptr());
         }
     }
 }
@@ -71,6 +82,19 @@ fn golden_path(_vm: JavaVM) {
 
     entry3.set_password("test3").unwrap();
     assert_eq!(entry3.get_password().unwrap(), "test3");
+}
+
+fn delete_credential(_vm: JavaVM) {
+    let entry1 = Entry::new("myservice", "delete-test").unwrap();
+
+    entry1.set_password("test").unwrap();
+    assert_eq!(entry1.get_password().unwrap(), "test");
+
+    entry1.delete_credential().unwrap();
+    match entry1.get_password() {
+        Err(keyring_core::Error::NoEntry) => {}
+        x => panic!("unexpected result on entry1 get_password(): {x:?}"),
+    };
 }
 
 fn corrupted_entry(vm: JavaVM) {
