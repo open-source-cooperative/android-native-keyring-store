@@ -1,9 +1,10 @@
 use crate::{
     credential::{
-        BLOCK_MODE_GCM, ENCRYPTION_PADDING_NONE, KEY_ALGORITHM_AES, PROVIDER, PURPOSE_DECRYPT,
-        PURPOSE_ENCRYPT,
+        BLOCK_MODE_GCM, CorruptedData, ENCRYPTION_PADDING_NONE, KEY_ALGORITHM_AES, MODE_PRIVATE,
+        PROVIDER, PURPOSE_DECRYPT, PURPOSE_ENCRYPT,
     },
     keystore::{KeyGenParameterSpecBuilder, KeyGenerator},
+    shared_preferences::Context,
 };
 use android_log_sys::{__android_log_write, LogPriority};
 use jni::{JNIEnv, JavaVM, objects::JObject};
@@ -14,24 +15,29 @@ use std::ffi::CString;
 // import android.content.Context
 // class KeyringTests {
 //     companion object {
-//         external fun runTests();
+//         external fun runTests(context: android.content.Context);
 //     }
 // }
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_io_crates_keyring_KeyringTests_00024Companion_runTests(
     env: JNIEnv,
     _class: JObject,
+    context: JObject,
 ) {
+    let context = Context::new(&env, context).unwrap();
     let testing = [
-        ("golden_path", golden_path as fn(JavaVM)),
+        ("golden_path", golden_path as fn(JavaVM, Context)),
         ("delete_credential", delete_credential),
-        ("corrupted_entry", corrupted_entry),
+        ("missing_iv_len", missing_iv_len),
+        ("iv_too_big", iv_too_big),
+        ("decryption_failure", decryption_failure),
         ("concurrent_access", concurrent_access),
     ]
     .iter()
     .map(|(name, entry)| {
         let java_vm = env.get_java_vm().unwrap();
-        (name, std::thread::spawn(move || entry(java_vm)))
+        let context = context.clone();
+        (name, std::thread::spawn(move || entry(java_vm, context)))
     })
     .collect::<Vec<_>>();
 
@@ -58,7 +64,7 @@ pub extern "system" fn Java_io_crates_keyring_KeyringTests_00024Companion_runTes
     }
 }
 
-fn golden_path(_vm: JavaVM) {
+fn golden_path(_vm: JavaVM, _ctx: Context) {
     let entry1 = Entry::new("myservice", "myuser").unwrap();
     let entry2 = Entry::new("myservice", "myuser2").unwrap();
     let entry3 = Entry::new("myservice2", "myuser").unwrap();
@@ -84,7 +90,7 @@ fn golden_path(_vm: JavaVM) {
     assert_eq!(entry3.get_password().unwrap(), "test3");
 }
 
-fn delete_credential(_vm: JavaVM) {
+fn delete_credential(_vm: JavaVM, _ctx: Context) {
     let entry1 = Entry::new("myservice", "delete-test").unwrap();
 
     entry1.set_password("test").unwrap();
@@ -97,7 +103,64 @@ fn delete_credential(_vm: JavaVM) {
     };
 }
 
-fn corrupted_entry(vm: JavaVM) {
+fn missing_iv_len(vm: JavaVM, ctx: Context) {
+    let entry1 = Entry::new("missing-iv-len", "user").expect("Entry::new");
+    entry1.set_password("test").expect("set_password");
+
+    // Force setting entry to empty data
+    {
+        let mut env = vm.attach_current_thread().expect("attach_current_thread");
+        let shared = ctx
+            .get_shared_preferences(&mut env, "missing-iv-len", MODE_PRIVATE)
+            .unwrap();
+        let editor = shared.edit(&mut env).unwrap();
+        editor.put_binary(&mut env, "user", &[]).unwrap();
+        editor.commit(&mut env).unwrap();
+    }
+
+    match entry1.get_password() {
+        Err(keyring_core::Error::BadDataFormat(_, error)) => {
+            match error.downcast::<CorruptedData>().as_deref() {
+                Ok(&CorruptedData::MissingIvLen) => (),
+                x => panic!("unexpected result on corrupted get_password(): {x:?}"),
+            }
+        }
+        x => panic!("unexpected result on corrupted get_password(): {x:?}"),
+    }
+}
+
+fn iv_too_big(vm: JavaVM, ctx: Context) {
+    let entry1 = Entry::new("iv-too-big", "user").expect("Entry::new");
+    entry1.set_password("test").expect("set_password");
+
+    const CIPHERTEXT_LEN: usize = "test".len() + 12 + 16;
+
+    // Force setting entry to empty data
+    {
+        let mut env = vm.attach_current_thread().expect("attach_current_thread");
+        let shared = ctx
+            .get_shared_preferences(&mut env, "iv-too-big", MODE_PRIVATE)
+            .unwrap();
+
+        let mut original = shared.get_binary(&mut env, "user").unwrap().unwrap();
+        original[0] = 253;
+        let editor = shared.edit(&mut env).unwrap();
+        editor.put_binary(&mut env, "user", &original).unwrap();
+        editor.commit(&mut env).unwrap();
+    }
+
+    match entry1.get_password() {
+        Err(keyring_core::Error::BadDataFormat(_, error)) => {
+            match error.downcast::<CorruptedData>().as_deref() {
+                Ok(&CorruptedData::IvTooBig(253, CIPHERTEXT_LEN)) => (),
+                x => panic!("unexpected result on corrupted get_password(): {x:?}"),
+            }
+        }
+        x => panic!("unexpected result on corrupted get_password(): {x:?}"),
+    }
+}
+
+fn decryption_failure(vm: JavaVM, _ctx: Context) {
     let entry1 = Entry::new("corrupted", "myuser").expect("Entry::new");
     entry1.set_password("test").expect("set_password");
 
@@ -126,13 +189,12 @@ fn corrupted_entry(vm: JavaVM) {
     }
 
     match entry1.get_password() {
-        Err(keyring_core::Error::PlatformFailure(_)) => (),
-        x => panic!("unexpected result on corrupted get_password(): {x:?}"),
-    }
-
-    let entry1 = Entry::new("corrupted", "myuser").expect("Entry::new");
-    match entry1.get_password() {
-        Err(keyring_core::Error::PlatformFailure(_)) => (),
+        Err(keyring_core::Error::BadDataFormat(_, error)) => {
+            match error.downcast::<CorruptedData>().as_deref() {
+                Ok(&CorruptedData::DecryptionFailure) => (),
+                x => panic!("unexpected result on corrupted get_password(): {x:?}"),
+            }
+        }
         x => panic!("unexpected result on corrupted get_password(): {x:?}"),
     }
 
@@ -140,7 +202,7 @@ fn corrupted_entry(vm: JavaVM) {
     assert_eq!(entry1.get_password().unwrap(), "reset");
 }
 
-fn concurrent_access(_vm: JavaVM) {
+fn concurrent_access(_vm: JavaVM, _ctx: Context) {
     let all = (0..64)
         .map(|_| {
             std::thread::spawn(|| {

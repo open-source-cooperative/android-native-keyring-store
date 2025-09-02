@@ -165,24 +165,34 @@ impl CredentialApi for AndroidCredential {
             let ciphertext = file.get_binary(env, &self.user)?;
 
             Ok(match ciphertext {
-                Some(ciphertext) => {
-                    if ciphertext.is_empty() {
-                        return Err(AndroidKeyringError::CorruptedData);
+                Some(data) => {
+                    if data.is_empty() {
+                        return Err(AndroidKeyringError::CorruptedData(
+                            data,
+                            CorruptedData::MissingIvLen,
+                        ));
                     }
 
-                    let iv_len = ciphertext[0] as usize;
-                    let ciphertext = &ciphertext[1..];
-                    if ciphertext.len() < iv_len {
-                        return Err(AndroidKeyringError::CorruptedData);
+                    let iv_len = data[0] as usize;
+                    let ciphertext = &data[1..];
+                    let ciphertext_len = ciphertext.len();
+                    if ciphertext_len < iv_len {
+                        return Err(AndroidKeyringError::CorruptedData(
+                            data,
+                            CorruptedData::IvTooBig(iv_len, ciphertext_len),
+                        ));
                     }
 
                     let iv = &ciphertext[..iv_len];
+                    let iv = &iv[..iv_len];
                     let ciphertext = &ciphertext[iv_len..];
 
                     let spec = GCMParameterSpec::new(env, 128, iv)?;
                     let cipher = Cipher::get_instance(env, CIPHER_TRANSFORMATION)?;
                     cipher.init2(env, DECRYPT_MODE, &key, spec.into())?;
-                    let plaintext = cipher.do_final(env, ciphertext)?;
+                    let plaintext = cipher.do_final(env, ciphertext).map_err(move |_| {
+                        AndroidKeyringError::CorruptedData(data, CorruptedData::DecryptionFailure)
+                    })?;
 
                     Some(plaintext)
                 }
@@ -234,11 +244,10 @@ pub trait HasJavaVm {
         if env.exception_check()? {
             env.exception_describe()?;
             env.exception_clear()?;
-            if let Err(e) = t_result {
-                tracing::warn!(%e, "Result::Err being converted into JavaExceptionThrown");
-                tracing::debug!(?e);
+
+            if t_result.is_ok() {
+                return Err(AndroidKeyringError::JavaExceptionThrow);
             }
-            return Err(AndroidKeyringError::JavaExceptionThrow);
         }
 
         t_result
@@ -261,12 +270,32 @@ pub enum AndroidKeyringError {
     JniError(#[from] jni::errors::Error),
     #[error("Java exception was thrown")]
     JavaExceptionThrow,
-    #[error("Corrupted data in SharedPreferences")]
-    CorruptedData,
+    #[error("{1}")]
+    CorruptedData(Vec<u8>, CorruptedData),
 }
 impl From<AndroidKeyringError> for keyring_core::Error {
     fn from(value: AndroidKeyringError) -> Self {
-        Self::PlatformFailure(Box::new(value))
+        match value {
+            AndroidKeyringError::JniError(error) => {
+                keyring_core::Error::PlatformFailure(Box::new(error))
+            }
+            e @ AndroidKeyringError::JavaExceptionThrow => {
+                keyring_core::Error::PlatformFailure(Box::new(e))
+            }
+            AndroidKeyringError::CorruptedData(data, error) => {
+                keyring_core::Error::BadDataFormat(data, Box::new(error))
+            }
+        }
     }
 }
 type AndroidKeyringResult<T> = Result<T, AndroidKeyringError>;
+
+#[derive(thiserror::Error, Debug)]
+pub enum CorruptedData {
+    #[error("IV length not specified on entry")]
+    MissingIvLen,
+    #[error("IV is bigger than the whole entry data, IV length = {0}, ciphertext length = {1}")]
+    IvTooBig(usize, usize),
+    #[error("Verification of data signature/MAC failed")]
+    DecryptionFailure,
+}

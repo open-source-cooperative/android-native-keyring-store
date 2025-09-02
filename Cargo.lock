@@ -13,7 +13,7 @@ dependencies = [
 
 [[package]]
 name = "android-native-keyring-store"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "android_log-sys",
  "base64",
@@ -89,9 +89,9 @@ checksum = "8eaf4bc02d17cbdd7ff4c7438cafcdf7fb9a4613313ad11b4f8fefe7d3fa0130"
 
 [[package]]
 name = "keyring-core"
-version = "0.5.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4334ce6f52997b27cdf93ff93e9b7dc585ddcb377006154fb2f6a695c40c53d6"
+checksum = "95c88c9f6a100174c2303fe51bb24749978951cb1c6d9c817349d0beb8f3ab24"
 dependencies = [
  "log",
 ]
