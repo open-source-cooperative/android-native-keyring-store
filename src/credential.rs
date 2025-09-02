@@ -23,6 +23,7 @@ pub const MODE_PRIVATE: i32 = 0;
 pub const ENCRYPT_MODE: i32 = 1;
 pub const DECRYPT_MODE: i32 = 2;
 pub const CIPHER_TRANSFORMATION: &str = "AES/GCM/NoPadding";
+pub const IV_LEN: usize = 12;
 
 pub struct AndroidStore {
     java_vm: Arc<JavaVM>,
@@ -141,6 +142,11 @@ impl CredentialApi for AndroidCredential {
             let cipher = Cipher::get_instance(env, CIPHER_TRANSFORMATION)?;
             cipher.init(env, ENCRYPT_MODE, &key)?;
             let iv = cipher.get_iv(env)?;
+            assert_eq!(
+                iv.len(),
+                IV_LEN,
+                "IV should always be 12 bytes, please file a bug report"
+            );
             let ciphertext = cipher.do_final(env, secret)?;
 
             let iv_len = iv.len() as u8;
@@ -174,12 +180,20 @@ impl CredentialApi for AndroidCredential {
                     }
 
                     let iv_len = data[0] as usize;
-                    let ciphertext = &data[1..];
-                    let ciphertext_len = ciphertext.len();
-                    if ciphertext_len < iv_len {
+
+                    if iv_len != IV_LEN {
                         return Err(AndroidKeyringError::CorruptedData(
                             data,
-                            CorruptedData::IvTooBig(iv_len, ciphertext_len),
+                            CorruptedData::InvalidIvLen(iv_len),
+                        ));
+                    }
+
+                    let ciphertext = &data[1..];
+                    let ciphertext_len = ciphertext.len();
+                    if ciphertext_len <= iv_len {
+                        return Err(AndroidKeyringError::CorruptedData(
+                            data,
+                            CorruptedData::DataTooSmall(ciphertext_len),
                         ));
                     }
 
@@ -294,8 +308,10 @@ type AndroidKeyringResult<T> = Result<T, AndroidKeyringError>;
 pub enum CorruptedData {
     #[error("IV length not specified on entry")]
     MissingIvLen,
-    #[error("IV is bigger than the whole entry data, IV length = {0}, ciphertext length = {1}")]
-    IvTooBig(usize, usize),
+    #[error("IV length in data is {0}, but should be {expected}", expected=IV_LEN)]
+    InvalidIvLen(usize),
+    #[error("Data is too small to contain IV and ciphertext, length = {0}")]
+    DataTooSmall(usize),
     #[error("Verification of data signature/MAC failed")]
     DecryptionFailure,
 }
