@@ -29,7 +29,8 @@ pub extern "system" fn Java_io_crates_keyring_KeyringTests_00024Companion_runTes
         ("golden_path", golden_path as fn(JavaVM, Context)),
         ("delete_credential", delete_credential),
         ("missing_iv_len", missing_iv_len),
-        ("iv_too_big", iv_too_big),
+        ("data_too_small", data_too_small),
+        ("invalid_iv", invalid_iv),
         ("decryption_failure", decryption_failure),
         ("concurrent_access", concurrent_access),
     ]
@@ -129,11 +130,9 @@ fn missing_iv_len(vm: JavaVM, ctx: Context) {
     }
 }
 
-fn iv_too_big(vm: JavaVM, ctx: Context) {
+fn data_too_small(vm: JavaVM, ctx: Context) {
     let entry1 = Entry::new("iv-too-big", "user").expect("Entry::new");
     entry1.set_password("test").expect("set_password");
-
-    const CIPHERTEXT_LEN: usize = "test".len() + 12 + 16;
 
     // Force setting entry to empty data
     {
@@ -143,7 +142,7 @@ fn iv_too_big(vm: JavaVM, ctx: Context) {
             .unwrap();
 
         let mut original = shared.get_binary(&mut env, "user").unwrap().unwrap();
-        original[0] = 253;
+        original.truncate(13);
         let editor = shared.edit(&mut env).unwrap();
         editor.put_binary(&mut env, "user", &original).unwrap();
         editor.commit(&mut env).unwrap();
@@ -152,7 +151,38 @@ fn iv_too_big(vm: JavaVM, ctx: Context) {
     match entry1.get_password() {
         Err(keyring_core::Error::BadDataFormat(_, error)) => {
             match error.downcast::<CorruptedData>().as_deref() {
-                Ok(&CorruptedData::IvTooBig(253, CIPHERTEXT_LEN)) => (),
+                Ok(&CorruptedData::DataTooSmall(12)) => (),
+                x => panic!("unexpected result on corrupted get_password(): {x:?}"),
+            }
+        }
+        x => panic!("unexpected result on corrupted get_password(): {x:?}"),
+    }
+}
+
+fn invalid_iv(vm: JavaVM, ctx: Context) {
+    let entry1 = Entry::new("invalid-iv", "user").expect("Entry::new");
+    entry1.set_password("test").expect("set_password");
+
+    const CIPHERTEXT_LEN: usize = "test".len() + 12 + 16;
+
+    // Force setting entry to empty data
+    {
+        let mut env = vm.attach_current_thread().expect("attach_current_thread");
+        let shared = ctx
+            .get_shared_preferences(&mut env, "invalid-iv", MODE_PRIVATE)
+            .unwrap();
+
+        let mut original = shared.get_binary(&mut env, "user").unwrap().unwrap();
+        original[0] = (CIPHERTEXT_LEN - 1) as u8;
+        let editor = shared.edit(&mut env).unwrap();
+        editor.put_binary(&mut env, "user", &original).unwrap();
+        editor.commit(&mut env).unwrap();
+    }
+
+    match entry1.get_password() {
+        Err(keyring_core::Error::BadDataFormat(_, error)) => {
+            match error.downcast::<CorruptedData>().as_deref() {
+                Ok(&CorruptedData::InvalidIvLen(31)) => (),
                 x => panic!("unexpected result on corrupted get_password(): {x:?}"),
             }
         }
