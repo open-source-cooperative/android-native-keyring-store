@@ -29,6 +29,16 @@ pub struct AndroidStore {
     java_vm: Arc<JavaVM>,
     context: Context,
 }
+
+impl std::fmt::Debug for AndroidStore {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AndroidStore")
+            .field("vendor", &self.vendor())
+            .field("id", &self.id())
+            .finish()
+    }
+}
+
 impl AndroidStore {
     /// Initializes AndroidBuilder using the JNI context available
     /// on the `ndk-context` crate.
@@ -38,20 +48,24 @@ impl AndroidStore {
         let vm = ctx.vm().cast();
         let activity = ctx.context();
 
-        let java_vm = unsafe { jni::JavaVM::from_raw(vm)? };
+        let java_vm = unsafe { JavaVM::from_raw(vm)? };
         let env = java_vm.attach_current_thread()?;
 
         let context = unsafe { jni::objects::JObject::from_raw(activity as jni::sys::jobject) };
         let context = Context::new(&env, context)?;
 
-        Self::new(&env, context)
+        Self::from_activity_context(&env, context)
     }
 
-    pub fn new(env: &JNIEnv, context: Context) -> AndroidKeyringResult<Arc<Self>> {
+    pub fn from_activity_context(
+        env: &JNIEnv,
+        context: Context,
+    ) -> AndroidKeyringResult<Arc<Self>> {
         let java_vm = Arc::new(env.get_java_vm()?);
         Ok(Arc::new(Self { java_vm, context }))
     }
 }
+
 impl CredentialStoreApi for AndroidStore {
     fn vendor(&self) -> String {
         "SharedPreferences/KeyStore, https://github.com/open-source-cooperative/android-native-keyring-store".to_string()
@@ -80,6 +94,10 @@ impl CredentialStoreApi for AndroidStore {
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
+
+    fn debug_fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Debug::fmt(self, f)
+    }
 }
 
 pub struct AndroidCredential {
@@ -88,6 +106,16 @@ pub struct AndroidCredential {
     service: String,
     user: String,
 }
+
+impl std::fmt::Debug for AndroidCredential {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AndroidCredential")
+            .field("service", &self.service)
+            .field("user", &self.user)
+            .finish()
+    }
+}
+
 impl AndroidCredential {
     pub fn new(java_vm: Arc<JavaVM>, context: Context, service: &str, user: &str) -> Self {
         Self {
@@ -243,6 +271,10 @@ impl CredentialApi for AndroidCredential {
 
     fn as_any(&self) -> &dyn std::any::Any {
         self
+    }
+
+    fn debug_fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Debug::fmt(self, f)
     }
 }
 

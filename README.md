@@ -1,7 +1,7 @@
 # Android Keyring
 
 Pure Rust integration of Android's `KeyStore` and Android's `SharedPreferences`
-with crate [keyring](https://crates.io/crates/keyring).
+with crate [keyring-core](https://crates.io/crates/keyring-core).
 
 The Java API is called by using JNI, so no actual Java code needs to be inserted
 in the project.
@@ -14,7 +14,7 @@ sensitive applications.
 # Initialization
 
 There are two options for setting Android Keyring as the default entry builder
-for `keyring-rs`.
+for `keyring-core`.
 
 ## `ndk-context` (Recommended)
 
@@ -24,7 +24,7 @@ setup `ndk-context`, e.g., Dioxus Mobile, Tauri Mobile and android-activity.
 Invoke the initialization function once on the startup of the project:
 
 ```rust
-keyring_core::set_default_store(android_native_keyring_store::AndroidStore::from_ndk_context().unwrap());
+keyring_core::set_default_store(android_native_keyring_store::Store::new().unwrap());
 ```
 
 ## Manual initialization through Java/Kotlin Code
@@ -35,6 +35,7 @@ application has access to the JNI context and the Android's Activity context.
 
 Insert the following Kotlin code into your Android project:
 
+```kotlin
     package io.crates.keyring;
     import android.content.Context
     class Keyring {
@@ -47,14 +48,17 @@ Insert the following Kotlin code into your Android project:
             external fun setAndroidKeyringCredentialBuilder(context: Context);
         }
     }
+```
 
 From your main activity, initialize the credential builder, e.g:
 
+```kotlin
     class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         Keyring.setAndroidKeyringCredentialBuilder(this);
+```
 
 Note 1: This code expects that a library file `libandroid_native_keyring_store.so` was
 compiled with the contents of this package. Depending on how the project is
