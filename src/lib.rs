@@ -66,7 +66,7 @@ impl Store {
     }
 
     pub fn new_with_configuration(configuration: &HashMap<&str, &str>) -> Result<Arc<Self>> {
-        if (!configuration.is_empty()) {
+        if !configuration.is_empty() {
             return Err(Error::NotSupportedByStore(
                 "The Android Keyring Store does not support configuration options".to_string(),
             ));
