@@ -9,6 +9,7 @@ repository = "https://github.com/open-source-cooperative/android-native-keyring-
 version = "0.5.0"
 edition = "2024"
 readme = "README.md"
+exclude = ["android-tester"]
 
 [lib]
 crate-type = ["lib", "cdylib"]
