@@ -18,6 +18,7 @@ use std::ffi::CString;
 //         external fun runTests(context: android.content.Context);
 //     }
 // }
+#[allow(non_snake_case)]
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_io_crates_keyring_KeyringTests_00024Companion_runTests(
     env: JNIEnv,
@@ -25,6 +26,27 @@ pub extern "system" fn Java_io_crates_keyring_KeyringTests_00024Companion_runTes
     context: JObject,
 ) {
     let context = Context::new(&env, context).unwrap();
+    match crate::Store::new() {
+        Ok(store) => {
+            keyring_core::set_default_store(store);
+            let msg = c"Successfully created store from ndk-context";
+            let tag = c"unit-test";
+            let level = LogPriority::INFO as i32;
+            unsafe {
+                __android_log_write(level, tag.as_ptr(), msg.as_ptr());
+            }
+        },
+        Err(e) => {
+            let message = format!("Failed to create AndroidKeyStore: {e}");
+            let msg = CString::new(message).unwrap();
+            let tag = c"unit-test";
+            let level = LogPriority::ERROR as i32;
+            unsafe {
+                __android_log_write(level, tag.as_ptr(), msg.as_ptr());
+            }
+            return;
+        }
+    }
     let testing = [
         ("golden_path", golden_path as fn(JavaVM, Context)),
         ("delete_credential", delete_credential),
@@ -63,12 +85,19 @@ pub extern "system" fn Java_io_crates_keyring_KeyringTests_00024Companion_runTes
             __android_log_write(level, tag.as_ptr(), msg.as_ptr());
         }
     }
+    keyring_core::unset_default_store();
+    let msg = c"All tests complete";
+    let tag = c"unit-test";
+    let level = LogPriority::INFO as i32;
+    unsafe {
+        __android_log_write(level, tag.as_ptr(), msg.as_ptr());
+    }
 }
 
 fn golden_path(_vm: JavaVM, _ctx: Context) {
-    let entry1 = Entry::new("myservice", "myuser").unwrap();
-    let entry2 = Entry::new("myservice", "myuser2").unwrap();
-    let entry3 = Entry::new("myservice2", "myuser").unwrap();
+    let entry1 = Entry::new("my-service", "my-user").unwrap();
+    let entry2 = Entry::new("my-service", "my-user2").unwrap();
+    let entry3 = Entry::new("my-service2", "my-user").unwrap();
     entry1.delete_credential().unwrap();
     entry2.delete_credential().unwrap();
     entry3.delete_credential().unwrap();
@@ -92,7 +121,7 @@ fn golden_path(_vm: JavaVM, _ctx: Context) {
 }
 
 fn delete_credential(_vm: JavaVM, _ctx: Context) {
-    let entry1 = Entry::new("myservice", "delete-test").unwrap();
+    let entry1 = Entry::new("my-service", "delete-test").unwrap();
 
     entry1.set_password("test").unwrap();
     assert_eq!(entry1.get_password().unwrap(), "test");
@@ -191,10 +220,10 @@ fn invalid_iv(vm: JavaVM, ctx: Context) {
 }
 
 fn decryption_failure(vm: JavaVM, _ctx: Context) {
-    let entry1 = Entry::new("corrupted", "myuser").expect("Entry::new");
+    let entry1 = Entry::new("corrupted", "my-user").expect("Entry::new");
     entry1.set_password("test").expect("set_password");
 
-    // Force generating new key in order to corrupt entry
+    // Force generating a new key to corrupt entry
     {
         let mut env = vm.attach_current_thread().expect("attach_current_thread");
         let env = &mut env;
