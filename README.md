@@ -29,7 +29,7 @@ keyring_core::set_default_store(android_native_keyring_store::Store::new().unwra
 
 ## Manual initialization through Java/Kotlin Code
 
-If the project does not support `ndk-context` (e.g. Flutter/FRB), then
+If the project does not initialize `ndk-context` (e.g. Flutter/FRB), then
 Java/Kotlin code must be inserted into the project so that the Andorid Keyring
 application has access to the JNI context and the Android's Activity context.
 
@@ -45,7 +45,7 @@ Insert the following Kotlin code into your Android project:
                 System.loadLibrary("android_native_keyring_store")
             }
 
-            external fun setAndroidKeyringCredentialBuilder(context: Context);
+            external fun initializeNdkContext(context: Context);
         }
     }
 ```
@@ -57,7 +57,7 @@ From your main activity, initialize the credential builder, e.g:
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        Keyring.setAndroidKeyringCredentialBuilder(this);
+        Keyring.initializeNdkContext(this);
 ```
 
 Note 1: This code expects that a library file `libandroid_native_keyring_store.so` was

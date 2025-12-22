@@ -14,16 +14,15 @@ readme = "README.md"
 crate-type = ["lib", "cdylib"]
 
 [features]
-default = ["ndk-context"]
 compile_tests = ["android_log-sys"]
 android-log = ["android_log-sys", "tracing-subscriber/env-filter"]
 
 [dependencies]
-android_log-sys = { version = "0.3.2", optional = true }
-base64 = "0.22.1"
-jni = "0.21.1"
+android_log-sys = { version = "0.3", optional = true }
+base64 = "0.22"
+jni = "0.21"
 keyring-core = "0.7"
+ndk-context = { version = "0.1" }
 thiserror = "2"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", optional = true }
-ndk-context = { version = "0.1", optional = true }

@@ -42,7 +42,6 @@ impl std::fmt::Debug for AndroidStore {
 impl AndroidStore {
     /// Initializes AndroidBuilder using the JNI context available
     /// on the `ndk-context` crate.
-    #[cfg(feature = "ndk-context")]
     pub fn from_ndk_context() -> AndroidKeyringResult<Arc<Self>> {
         let ctx = ndk_context::android_context();
         let vm = ctx.vm().cast();
@@ -51,16 +50,8 @@ impl AndroidStore {
         let java_vm = unsafe { JavaVM::from_raw(vm)? };
         let env = java_vm.attach_current_thread()?;
 
-        let context = unsafe { jni::objects::JObject::from_raw(activity as jni::sys::jobject) };
-        let context = Context::new(&env, context)?;
-
-        Self::from_activity_context(&env, context)
-    }
-
-    pub fn from_activity_context(
-        env: &JNIEnv,
-        context: Context,
-    ) -> AndroidKeyringResult<Arc<Self>> {
+        let j_context = unsafe { jni::objects::JObject::from_raw(activity as jni::sys::jobject) };
+        let context = Context::new(&env, j_context)?;
         let java_vm = Arc::new(env.get_java_vm()?);
         Ok(Arc::new(Self { java_vm, context }))
     }
