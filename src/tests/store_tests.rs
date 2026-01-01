@@ -1,7 +1,4 @@
 use std::collections::HashMap;
-use std::panic::catch_unwind;
-
-use android_log_sys::LogPriority;
 
 use keyring_core::{Entry, api::CredentialStoreApi};
 
@@ -34,53 +31,15 @@ pub fn run_tests() -> (usize, usize) {
         ("path_separator_filename", path_separator_filename),
         #[cfg(feature = "android-log")]
         ("logcat_routing", super::log_tests::logcat_routing),
-    ]
-    .iter()
+    ];
     // user_auth_timeout needs a secure lock screen and a device unlocked in the last 300 seconds,
     // and auth_without_lock_screen needs a device without one.
-    .filter(|(name, _)| match *name {
+    let selected = testing.into_iter().filter(|(name, _)| match *name {
         "user_auth_timeout" => cfg!(feature = "user-auth-tests"),
         "auth_without_lock_screen" => !cfg!(feature = "user-auth-tests"),
         _ => true,
-    })
-    .map(|(name, entry)| {
-        (name, move || -> keyring_core::Result<()> {
-            catch_unwind(entry)
-                .map_err(|e| {
-                    log::error!("Test {name} panicked: {e:?}");
-                    bad_result(name, "panicked")
-                })
-                .unwrap_or_else(|e| e)
-        })
-    })
-    .collect::<Vec<_>>();
-
-    super::report(LogPriority::INFO, "Running Store tests...");
-    let mut successes = 0;
-    let mut failures = 0;
-    for (name, testing) in testing {
-        let level;
-        let msg;
-        match testing() {
-            Ok(()) => {
-                level = LogPriority::INFO;
-                msg = format!("{name} success");
-                successes += 1;
-            }
-            Err(e) => {
-                level = LogPriority::ERROR;
-                msg = format!("{name} error: {e:?}");
-                failures += 1;
-            }
-        }
-
-        super::report(level, &msg);
-    }
-    super::report(
-        LogPriority::INFO,
-        &format!("Store: {} successes, {} failures", successes, failures),
-    );
-    (successes, failures)
+    });
+    super::run_suite("Store", selected)
 }
 
 const STORE_CONFIG: [(&str, &str); 2] = [("name", "test"), ("divider", "@")];

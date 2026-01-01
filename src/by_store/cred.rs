@@ -37,7 +37,7 @@ impl Cred {
     /// service and user.
     ///
     /// No validity checking is done, that's assumed to be done by the caller.
-    pub fn new_specifier(vault: AtomicVault, id: &str, service: &str, user: &str) -> Self {
+    pub(crate) fn new_specifier(vault: AtomicVault, id: &str, service: &str, user: &str) -> Self {
         Self {
             vault,
             id: id.to_owned(),

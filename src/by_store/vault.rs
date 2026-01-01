@@ -147,7 +147,7 @@ pub fn clear_vault_list() {
 ///
 /// There is an associated key in the Android Keystore that encrypts credential secrets,
 /// or, when that key needs an approval per use, wraps a data key that encrypts them.
-pub struct Vault {
+pub(crate) struct Vault {
     context: AndroidContext,
     config: StoreConfig,
     unlock: Unlock,
@@ -246,7 +246,7 @@ fn split_id<'a>(config: &StoreConfig, id: &'a str) -> Option<(&'a str, &'a str)>
 impl Vault {
     /// Find all credentials whose ids match a given regular expression, returning
     /// the triple (id, service, user) for each matching credential.
-    pub fn get_ids(&self, re: &Regex) -> Result<Vec<(String, String, String)>> {
+    pub(crate) fn get_ids(&self, re: &Regex) -> Result<Vec<(String, String, String)>> {
         let mut ids = Vec::new();
         self.with_env(|env| {
             let file = self.get_file(env)?;
@@ -272,7 +272,7 @@ impl Vault {
     }
 
     /// Locks the vault and returns a cipher for the user to approve and [Vault::finish_unlock].
-    pub fn begin_unlock(&mut self) -> Result<GlobalRef> {
+    pub(crate) fn begin_unlock(&mut self) -> Result<GlobalRef> {
         self.check_zero_timeout()?;
         self.unlock = Unlock::Locked;
         let (cipher, sealed) = self.with_env(|env| {
@@ -288,7 +288,7 @@ impl Vault {
     }
 
     /// Unlocks the vault with the approved cipher from the latest [Vault::begin_unlock].
-    pub fn finish_unlock(&mut self, approved: &JObject) -> Result<()> {
+    pub(crate) fn finish_unlock(&mut self, approved: &JObject) -> Result<()> {
         self.check_zero_timeout()?;
         let not_latest = || {
             let err = "is not the one from the latest unlock".to_string();
@@ -331,7 +331,7 @@ impl Vault {
     }
 
     /// Locks the vault until the next [Vault::finish_unlock].
-    pub fn lock(&mut self) -> Result<()> {
+    pub(crate) fn lock(&mut self) -> Result<()> {
         self.check_zero_timeout()?;
         self.unlock = Unlock::Locked;
         Ok(())
@@ -346,7 +346,7 @@ impl Vault {
     }
 
     #[cfg(feature = "compile-tests")]
-    pub fn change_key(&self) -> Result<()> {
+    pub(crate) fn change_key(&self) -> Result<()> {
         self.with_env(|env| {
             delete_key(env, &self.config.filename)?;
             create_key(env, &self.context, &self.config)?;
@@ -356,7 +356,7 @@ impl Vault {
     }
 
     #[cfg(feature = "compile-tests")]
-    pub fn remove_key(&self) -> Result<()> {
+    pub(crate) fn remove_key(&self) -> Result<()> {
         self.with_env(|env| delete_key(env, &self.config.filename))?;
         Ok(())
     }
@@ -365,14 +365,14 @@ impl Vault {
 static KEY_SERVICE_LOCK: Mutex<()> = Mutex::new(());
 
 impl Vault {
-    pub fn with_env<T, F>(&self, f: F) -> AndroidKeyringResult<T>
+    pub(crate) fn with_env<T, F>(&self, f: F) -> AndroidKeyringResult<T>
     where
         F: FnOnce(&mut JNIEnv) -> AndroidKeyringResult<T>,
     {
         with_env(&self.context, &self.config, f)
     }
 
-    pub fn with_key_and_file<T, F>(&self, f: F) -> AndroidKeyringResult<T>
+    pub(crate) fn with_key_and_file<T, F>(&self, f: F) -> AndroidKeyringResult<T>
     where
         F: FnOnce(&mut JNIEnv, Key, SharedPreferences) -> AndroidKeyringResult<T>,
     {
@@ -393,7 +393,7 @@ impl Vault {
             .ok_or_else(|| Error::BadStoreFormat("Encryption key not found".to_string()).into())
     }
 
-    pub fn get_file(&self, env: &mut JNIEnv) -> AndroidKeyringResult<SharedPreferences> {
+    pub(crate) fn get_file(&self, env: &mut JNIEnv) -> AndroidKeyringResult<SharedPreferences> {
         get_file(env, &self.context, &self.config.filename)
     }
 }

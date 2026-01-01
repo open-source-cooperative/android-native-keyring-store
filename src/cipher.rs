@@ -1,8 +1,8 @@
 use crate::{
     keystore::Key,
     methods::{
-        ClassDecl, Constructible, FromValue, JResult, Method, NoParam, SignatureComp, StaticMethod,
-        ToValue,
+        ClassDecl, Constructible, FromValue, JResult, Method, NoParam, SignatureComp, ToValue,
+        get_instance,
     },
 };
 use jni::{
@@ -33,14 +33,7 @@ impl Cipher {
     }
 
     pub(crate) fn get_instance(env: &mut JNIEnv, transformation: &str) -> JResult<Self> {
-        struct ThisMethod<'a>(PhantomData<&'a ()>);
-        impl<'a> StaticMethod for ThisMethod<'a> {
-            type Param = &'a str;
-            type Return = Cipher;
-
-            const NAME: &'static str = "getInstance";
-        }
-        ThisMethod::call(Self::class(), env, transformation)
+        get_instance(Self::class(), env, transformation)
     }
 
     pub(crate) fn init(&self, env: &mut JNIEnv, mode: i32, key: &Key) -> JResult<()> {
@@ -123,15 +116,6 @@ impl FromValue for GCMParameterSpec {
 
     fn from_object(self_: GlobalRef, _env: &mut JNIEnv) -> JResult<Self> {
         Ok(Self { self_ })
-    }
-}
-impl ToValue for GCMParameterSpec {
-    fn signature() -> SignatureComp {
-        Self::class().into()
-    }
-
-    fn to_value<'a>(&self, env: &mut JNIEnv<'a>) -> JResult<JValueGen<JObject<'a>>> {
-        Ok(env.new_local_ref(self.self_.as_obj())?.into())
     }
 }
 impl GCMParameterSpec {
