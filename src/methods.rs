@@ -1,5 +1,7 @@
 //! Object results are owned before each local reference frame is released.
 
+use std::marker::PhantomData;
+
 use jni::{
     JNIEnv,
     objects::{GlobalRef, JByteArray, JObject, JValue, JValueGen, JValueOwned},
@@ -92,6 +94,23 @@ pub(crate) trait StaticMethod {
     }
 }
 
+/// Calls the static `getInstance(String)` factory of `class`.
+pub(crate) fn get_instance<R: FromValue>(
+    class: ClassDecl,
+    env: &mut JNIEnv,
+    name: &str,
+) -> JResult<R> {
+    struct GetInstance<'a, R>(PhantomData<(&'a (), R)>);
+    impl<'a, R: FromValue> StaticMethod for GetInstance<'a, R> {
+        type Param = &'a str;
+        type Return = R;
+
+        const NAME: &'static str = "getInstance";
+    }
+
+    <GetInstance<'_, R> as StaticMethod>::call(class, env, name)
+}
+
 pub(crate) trait Constructible {
     type Param: AsParam;
     type Return: FromValue;
@@ -181,18 +200,6 @@ impl<T: ToValue> ToValue for &T {
         T::to_value(self, env)
     }
 }
-impl<T: ToValue> ToValue for Option<T> {
-    fn signature() -> SignatureComp {
-        T::signature()
-    }
-
-    fn to_value<'a>(&self, env: &mut JNIEnv<'a>) -> JResult<JValueGen<JObject<'a>>> {
-        Ok(match self {
-            Some(self_) => self_.to_value(env)?,
-            None => JObject::null().into(),
-        })
-    }
-}
 impl ToValue for &str {
     fn signature() -> SignatureComp {
         <String as FromValue>::signature()
@@ -230,18 +237,6 @@ impl ToValue for &[u8] {
     fn to_value<'a>(&self, env: &mut JNIEnv<'a>) -> JResult<JValueGen<JObject<'a>>> {
         let bytes: JObject = env.byte_array_from_slice(self)?.into();
         Ok(bytes.into())
-    }
-}
-impl ToValue for Vec<u16> {
-    fn signature() -> SignatureComp {
-        SignatureComp::ArrayChar
-    }
-
-    fn to_value<'a>(&self, env: &mut JNIEnv<'a>) -> JResult<JValueGen<JObject<'a>>> {
-        let chars = env.new_char_array(self.len() as i32)?;
-        env.set_char_array_region(&chars, 0, self)?;
-        let chars: JObject = chars.into();
-        Ok(chars.into())
     }
 }
 impl ToValue for i32 {

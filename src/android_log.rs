@@ -21,13 +21,14 @@ extern "system" fn Java_io_crates_keyring_KeyringLog_00024Companion_setLog(
     _class: JObject,
     filter: JString,
 ) {
-    let filter = {
-        let filter = env.get_string(&filter).unwrap();
-        filter.to_string_lossy().into_owned()
-    };
+    let filter = env.get_string(&filter).unwrap();
+    set_log(&filter.to_string_lossy());
+}
 
+/// Installs the logcat subscriber with `filter`, or warns when a global subscriber exists.
+pub(crate) fn set_log(filter: &str) {
     match Registry::default()
-        .with(EnvFilter::from(&filter))
+        .with(EnvFilter::from(filter))
         .with(AndroidLogCat)
         .try_init()
     {
