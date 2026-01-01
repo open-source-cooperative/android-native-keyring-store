@@ -14,9 +14,15 @@ permissions:
   contents: read
 
 jobs:
-  keyring-tester:
+  emulator:
+    name: emulator (API ${{ matrix.api-level }})
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        # The declared minimum API level and the current one.
+        api-level: [24, 35]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -49,7 +55,16 @@ jobs:
         run: ./gradlew --no-daemon assembleDebug
       - uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         with:
-          api-level: 35
+          api-level: ${{ matrix.api-level }}
           arch: x86_64
           profile: pixel_6
           script: .github/scripts/keyring-tester.sh
+
+  keyring-tester:
+    if: always()
+    needs: [emulator]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if any emulator run failed
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1

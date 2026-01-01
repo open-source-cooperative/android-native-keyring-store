@@ -2,11 +2,13 @@ package com.brotsky.android.testing.keyring
 
 import android.hardware.biometrics.BiometricManager.Authenticators
 import android.hardware.biometrics.BiometricPrompt
+import android.os.Build
 import android.os.Bundle
 import android.os.CancellationSignal
 import android.system.Os
 import android.util.Log
 import androidx.activity.enableEdgeToEdge
+import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -50,12 +52,13 @@ class MainActivity : AppCompatActivity() {
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         // SystemUI cancels a prompt whose app is not yet the top task, which onCreate can still be.
-        if (hasFocus && !unlockStarted) {
+        if (hasFocus && !unlockStarted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             unlockStarted = true
             runUnlockTests()
         }
     }
 
+    @RequiresApi(Build.VERSION_CODES.R)
     private fun runUnlockTests() {
         val first = KeyringTests.unlockTestsStart() ?: return
         approve(first, "Unlock the test store") { approved ->
@@ -69,6 +72,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    @RequiresApi(Build.VERSION_CODES.R)
     private fun approve(cipher: Cipher, title: String, onApproved: (Cipher) -> Unit) {
         val prompt = BiometricPrompt.Builder(this)
             .setTitle(title)
