@@ -1,5 +1,5 @@
 [package]
-authors = ["André Puel <andrepuel@gmail.com>"]
+authors = ["André Puel <andrepuel@gmail.com>", "Dan Brotsky <dev@brotsky.com>"]
 description = "Android CredentialStore for keyring-core"
 homepage = "https://github.com/open-source-cooperative/android-native-keyring-store"
 keywords = ["password", "credential", "keychain", "android", "keystore"]

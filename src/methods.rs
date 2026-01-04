@@ -355,16 +355,16 @@ impl<T: FromValue> FromValue for Option<T> {
         T::signature()
     }
 
-    fn from_null() -> JResult<Self> {
-        Ok(Self::None)
-    }
-
     fn from_object(value: GlobalRef, env: &mut JNIEnv) -> JResult<Self> {
         Ok(Some(T::from_object(value, env)?))
     }
 
     fn from_value(value: JValue) -> JResult<Self> {
         Ok(Some(T::from_value(value)?))
+    }
+
+    fn from_null() -> JResult<Self> {
+        Ok(Self::None)
     }
 }
 impl FromValue for () {

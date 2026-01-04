@@ -152,6 +152,7 @@ impl AndroidCredential {
         Ok(context.get_shared_preferences(env, service, MODE_PRIVATE)?)
     }
 }
+
 impl CredentialApi for AndroidCredential {
     fn set_secret(&self, secret: &[u8]) -> keyring_core::Result<()> {
         self.check_for_exception(|env| {
