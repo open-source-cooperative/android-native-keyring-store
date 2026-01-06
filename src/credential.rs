@@ -1,16 +1,19 @@
-use crate::{
-    cipher::{Cipher, GCMParameterSpec},
-    keystore::{Key, KeyGenParameterSpecBuilder, KeyGenerator, KeyStore},
-    shared_preferences::{Context, SharedPreferences},
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
 };
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use jni::{JNIEnv, JavaVM};
 use keyring_core::{
     Credential, Entry,
     api::{CredentialApi, CredentialStoreApi},
 };
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
+
+use crate::{
+    cipher::{Cipher, GCMParameterSpec},
+    keystore::{Key, KeyGenParameterSpecBuilder, KeyGenerator, KeyStore},
+    shared_preferences::{Context, SharedPreferences},
 };
 
 pub const KEY_ALGORITHM_AES: &str = "AES";
@@ -35,6 +38,7 @@ impl std::fmt::Debug for AndroidStore {
         f.debug_struct("AndroidStore")
             .field("vendor", &self.vendor())
             .field("id", &self.id())
+            .field("context", &self.context.id())
             .finish()
     }
 }
@@ -63,10 +67,16 @@ impl CredentialStoreApi for AndroidStore {
     }
 
     fn id(&self) -> String {
+        let now = SystemTime::now();
+        let elapsed = if now.lt(&UNIX_EPOCH) {
+            UNIX_EPOCH.duration_since(now).unwrap()
+        } else {
+            now.duration_since(UNIX_EPOCH).unwrap()
+        };
         format!(
-            "Version {}, context {}",
+            "KCrate version {}, Instantiated at {}",
             env!("CARGO_PKG_VERSION"),
-            self.context.id()
+            elapsed.as_secs_f64()
         )
     }
 
