@@ -47,7 +47,7 @@ impl KeyStore {
             fn to_value<'a>(
                 &self,
                 _env: &mut JNIEnv<'a>,
-            ) -> JResult<jni::objects::JValueGen<JObject<'a>>> {
+            ) -> JResult<JValueGen<JObject<'a>>> {
                 Ok(JObject::null().into())
             }
         }
@@ -313,7 +313,7 @@ impl ToValue for AlgorithmParameterSpec {
         Self::class().into()
     }
 
-    fn to_value<'a>(&self, env: &mut JNIEnv<'a>) -> JResult<jni::objects::JValueGen<JObject<'a>>> {
+    fn to_value<'a>(&self, env: &mut JNIEnv<'a>) -> JResult<JValueGen<JObject<'a>>> {
         Ok(env.new_local_ref(&self.self_)?.into())
     }
 }

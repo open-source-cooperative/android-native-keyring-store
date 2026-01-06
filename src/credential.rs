@@ -1,16 +1,19 @@
-use crate::{
-    cipher::{Cipher, GCMParameterSpec},
-    keystore::{Key, KeyGenParameterSpecBuilder, KeyGenerator, KeyStore},
-    shared_preferences::{Context, SharedPreferences},
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
 };
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use jni::{JNIEnv, JavaVM};
 use keyring_core::{
     Credential, Entry,
     api::{CredentialApi, CredentialStoreApi},
 };
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
+
+use crate::{
+    cipher::{Cipher, GCMParameterSpec},
+    keystore::{Key, KeyGenParameterSpecBuilder, KeyGenerator, KeyStore},
+    shared_preferences::{Context, SharedPreferences},
 };
 
 pub const KEY_ALGORITHM_AES: &str = "AES";
@@ -29,39 +32,51 @@ pub struct AndroidStore {
     java_vm: Arc<JavaVM>,
     context: Context,
 }
+
+impl std::fmt::Debug for AndroidStore {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AndroidStore")
+            .field("vendor", &self.vendor())
+            .field("id", &self.id())
+            .field("context", &self.context.id())
+            .finish()
+    }
+}
+
 impl AndroidStore {
     /// Initializes AndroidBuilder using the JNI context available
     /// on the `ndk-context` crate.
-    #[cfg(feature = "ndk-context")]
     pub fn from_ndk_context() -> AndroidKeyringResult<Arc<Self>> {
         let ctx = ndk_context::android_context();
         let vm = ctx.vm().cast();
         let activity = ctx.context();
 
-        let java_vm = unsafe { jni::JavaVM::from_raw(vm)? };
+        let java_vm = unsafe { JavaVM::from_raw(vm)? };
         let env = java_vm.attach_current_thread()?;
 
-        let context = unsafe { jni::objects::JObject::from_raw(activity as jni::sys::jobject) };
-        let context = Context::new(&env, context)?;
-
-        Self::new(&env, context)
-    }
-
-    pub fn new(env: &JNIEnv, context: Context) -> AndroidKeyringResult<Arc<Self>> {
+        let j_context = unsafe { jni::objects::JObject::from_raw(activity as jni::sys::jobject) };
+        let context = Context::new(&env, j_context)?;
         let java_vm = Arc::new(env.get_java_vm()?);
         Ok(Arc::new(Self { java_vm, context }))
     }
 }
+
 impl CredentialStoreApi for AndroidStore {
     fn vendor(&self) -> String {
         "SharedPreferences/KeyStore, https://github.com/open-source-cooperative/android-native-keyring-store".to_string()
     }
 
     fn id(&self) -> String {
+        let now = SystemTime::now();
+        let elapsed = if now.lt(&UNIX_EPOCH) {
+            UNIX_EPOCH.duration_since(now).unwrap()
+        } else {
+            now.duration_since(UNIX_EPOCH).unwrap()
+        };
         format!(
-            "Version {}, context {}",
+            "KCrate version {}, Instantiated at {}",
             env!("CARGO_PKG_VERSION"),
-            self.context.id()
+            elapsed.as_secs_f64()
         )
     }
 
@@ -80,6 +95,10 @@ impl CredentialStoreApi for AndroidStore {
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
+
+    fn debug_fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Debug::fmt(self, f)
+    }
 }
 
 pub struct AndroidCredential {
@@ -88,6 +107,16 @@ pub struct AndroidCredential {
     service: String,
     user: String,
 }
+
+impl std::fmt::Debug for AndroidCredential {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AndroidCredential")
+            .field("service", &self.service)
+            .field("user", &self.user)
+            .finish()
+    }
+}
+
 impl AndroidCredential {
     pub fn new(java_vm: Arc<JavaVM>, context: Context, service: &str, user: &str) -> Self {
         Self {
@@ -133,6 +162,7 @@ impl AndroidCredential {
         Ok(context.get_shared_preferences(env, service, MODE_PRIVATE)?)
     }
 }
+
 impl CredentialApi for AndroidCredential {
     fn set_secret(&self, secret: &[u8]) -> keyring_core::Result<()> {
         self.check_for_exception(|env| {
@@ -243,6 +273,10 @@ impl CredentialApi for AndroidCredential {
 
     fn as_any(&self) -> &dyn std::any::Any {
         self
+    }
+
+    fn debug_fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Debug::fmt(self, f)
     }
 }
 
