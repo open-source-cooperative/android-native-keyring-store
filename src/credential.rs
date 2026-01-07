@@ -2,7 +2,6 @@ use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
 };
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use jni::{JNIEnv, JavaVM};
 use keyring_core::{
@@ -31,11 +30,12 @@ pub const IV_LEN: usize = 12;
 pub struct AndroidStore {
     java_vm: Arc<JavaVM>,
     context: Context,
+    instance_id: String,
 }
 
 impl std::fmt::Debug for AndroidStore {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("AndroidStore")
+        f.debug_struct("Store")
             .field("vendor", &self.vendor())
             .field("id", &self.id())
             .field("context", &self.context.id())
@@ -57,27 +57,18 @@ impl AndroidStore {
         let j_context = unsafe { jni::objects::JObject::from_raw(activity as jni::sys::jobject) };
         let context = Context::new(&env, j_context)?;
         let java_vm = Arc::new(env.get_java_vm()?);
-        Ok(Arc::new(Self { java_vm, context }))
+        let instance_id = generate_instance_id();
+        Ok(Arc::new(Self { java_vm, context, instance_id }))
     }
 }
 
 impl CredentialStoreApi for AndroidStore {
     fn vendor(&self) -> String {
-        "SharedPreferences/KeyStore, https://github.com/open-source-cooperative/android-native-keyring-store".to_string()
+        "Android SharedPreferences/KeyStore, https://github.com/open-source-cooperative/android-native-keyring-store".to_string()
     }
 
     fn id(&self) -> String {
-        let now = SystemTime::now();
-        let elapsed = if now.lt(&UNIX_EPOCH) {
-            UNIX_EPOCH.duration_since(now).unwrap()
-        } else {
-            now.duration_since(UNIX_EPOCH).unwrap()
-        };
-        format!(
-            "KCrate version {}, Instantiated at {}",
-            env!("CARGO_PKG_VERSION"),
-            elapsed.as_secs_f64()
-        )
+        self.instance_id.clone()
     }
 
     fn build(
@@ -348,4 +339,22 @@ pub enum CorruptedData {
     DataTooSmall(usize),
     #[error("Verification of data signature/MAC failed")]
     DecryptionFailure,
+}
+
+
+fn generate_instance_id() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let now = SystemTime::now();
+    let elapsed = if now.lt(&UNIX_EPOCH) {
+        UNIX_EPOCH.duration_since(now).unwrap()
+    } else {
+        now.duration_since(UNIX_EPOCH).unwrap()
+    };
+
+    format!(
+        "Crate version {}, Instantiated at {}",
+        env!("CARGO_PKG_VERSION"),
+        elapsed.as_secs_f64()
+    )
 }
