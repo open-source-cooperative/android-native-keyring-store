@@ -1,2 +1,5 @@
 /.vscode
+/.cargo
 /target
+keyring-tester/app/src/main/jniLibs/
+keyring-tester/local.properties

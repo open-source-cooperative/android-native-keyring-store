@@ -9,6 +9,7 @@ use crate::{
 use android_log_sys::{__android_log_write, LogPriority};
 use jni::{JNIEnv, JavaVM, objects::JObject};
 use keyring_core::Entry;
+use std::collections::HashMap;
 use std::ffi::CString;
 
 // package io.crates.keyring
@@ -55,6 +56,9 @@ pub extern "system" fn Java_io_crates_keyring_KeyringTests_00024Companion_runTes
         ("invalid_iv", invalid_iv),
         ("decryption_failure", decryption_failure),
         ("concurrent_access", concurrent_access),
+        ("bio_golden_path", bio_golden_path),
+        ("bio_delete_credential", bio_delete_credential),
+        ("bio_concurrent_access", bio_concurrent_access),
     ]
     .iter()
     .map(|(name, entry)| {
@@ -276,5 +280,71 @@ fn concurrent_access(_vm: JavaVM, _ctx: Context) {
     }
 
     let entry = Entry::new("concurrent", "user").unwrap();
+    assert_eq!(entry.get_password().unwrap(), "same");
+}
+
+fn bio_modifiers() -> HashMap<&'static str, &'static str> {
+    HashMap::from([("user-auth-required", "true")])
+}
+
+fn bio_golden_path(_vm: JavaVM, _ctx: Context) {
+    let mods = bio_modifiers();
+    let entry1 = Entry::new_with_modifiers("bio-service", "bio-user", &mods).unwrap();
+    let entry2 = Entry::new_with_modifiers("bio-service", "bio-user2", &mods).unwrap();
+    let entry3 = Entry::new_with_modifiers("bio-service2", "bio-user", &mods).unwrap();
+    entry1.delete_credential().unwrap();
+    entry2.delete_credential().unwrap();
+    entry3.delete_credential().unwrap();
+
+    entry1.set_password("test").unwrap();
+    assert_eq!(entry1.get_password().unwrap(), "test");
+    match entry2.get_password() {
+        Err(keyring_core::Error::NoEntry) => {}
+        x => panic!("unexpected result on bio entry2 get_password(): {x:?}"),
+    };
+    match entry3.get_password() {
+        Err(keyring_core::Error::NoEntry) => {}
+        x => panic!("unexpected result on bio entry3 get_password(): {x:?}"),
+    };
+
+    entry2.set_password("test2").unwrap();
+    assert_eq!(entry2.get_password().unwrap(), "test2");
+
+    entry3.set_password("test3").unwrap();
+    assert_eq!(entry3.get_password().unwrap(), "test3");
+}
+
+fn bio_delete_credential(_vm: JavaVM, _ctx: Context) {
+    let mods = bio_modifiers();
+    let entry1 = Entry::new_with_modifiers("bio-service", "bio-delete-test", &mods).unwrap();
+
+    entry1.set_password("test").unwrap();
+    assert_eq!(entry1.get_password().unwrap(), "test");
+
+    entry1.delete_credential().unwrap();
+    match entry1.get_password() {
+        Err(keyring_core::Error::NoEntry) => {}
+        x => panic!("unexpected result on bio entry1 get_password(): {x:?}"),
+    };
+}
+
+fn bio_concurrent_access(_vm: JavaVM, _ctx: Context) {
+    let all = (0..64)
+        .map(|_| {
+            std::thread::spawn(|| {
+                let mods = bio_modifiers();
+                let entry =
+                    Entry::new_with_modifiers("bio-concurrent", "bio-user", &mods).unwrap();
+                entry.set_password("same").unwrap();
+            })
+        })
+        .collect::<Vec<_>>();
+
+    for t in all {
+        t.join().unwrap();
+    }
+
+    let mods = bio_modifiers();
+    let entry = Entry::new_with_modifiers("bio-concurrent", "bio-user", &mods).unwrap();
     assert_eq!(entry.get_password().unwrap(), "same");
 }
