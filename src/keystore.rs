@@ -269,6 +269,48 @@ impl KeyGenParameterSpecBuilder {
         ThisMethod::call(&self.self_, env, required)
     }
 
+    /// Set the validity duration (in seconds) after user authentication.
+    ///
+    /// Available on API 24+. When `seconds` > 0 the key is usable for that
+    /// many seconds after the user authenticates; when 0, auth is required
+    /// for every use.
+    pub fn set_user_authentication_validity_duration_seconds(
+        &self,
+        env: &mut JNIEnv,
+        seconds: i32,
+    ) -> JResult<KeyGenParameterSpecBuilder> {
+        struct ThisMethod;
+        impl Method for ThisMethod {
+            type Param = i32;
+            type Return = KeyGenParameterSpecBuilder;
+
+            const NAME: &str = "setUserAuthenticationValidityDurationSeconds";
+        }
+
+        ThisMethod::call(&self.self_, env, seconds)
+    }
+
+    /// Set user authentication parameters with explicit auth type bitmask.
+    ///
+    /// Available on API 30+. `auth_type` is a combination of
+    /// `BiometricManager.Authenticators` flags (e.g. `BIOMETRIC_STRONG | DEVICE_CREDENTIAL`).
+    pub fn set_user_authentication_parameters(
+        &self,
+        env: &mut JNIEnv,
+        timeout_seconds: i32,
+        auth_type: i32,
+    ) -> JResult<KeyGenParameterSpecBuilder> {
+        struct ThisMethod;
+        impl Method for ThisMethod {
+            type Param = (i32, i32);
+            type Return = KeyGenParameterSpecBuilder;
+
+            const NAME: &str = "setUserAuthenticationParameters";
+        }
+
+        ThisMethod::call(&self.self_, env, (timeout_seconds, auth_type))
+    }
+
     pub fn build(&self, env: &mut JNIEnv) -> JResult<KeyGenParameterSpec> {
         struct ThisMethod;
         impl Method for ThisMethod {

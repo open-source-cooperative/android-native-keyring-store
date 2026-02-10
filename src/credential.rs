@@ -75,10 +75,28 @@ impl CredentialStoreApi for AndroidStore {
         &self,
         service: &str,
         user: &str,
-        _modifiers: Option<&HashMap<&str, &str>>,
+        modifiers: Option<&HashMap<&str, &str>>,
     ) -> keyring_core::Result<Entry> {
-        let credential =
-            AndroidCredential::new(self.java_vm.clone(), self.context.clone(), service, user);
+        let mut user_auth_required = false;
+        let mut auth_timeout_seconds: i32 = 30;
+
+        if let Some(mods) = modifiers {
+            if mods.get("user-auth-required").is_some_and(|v| *v == "true") {
+                user_auth_required = true;
+            }
+            if let Some(timeout) = mods.get("user-auth-timeout") {
+                auth_timeout_seconds = timeout.parse().unwrap_or(30);
+            }
+        }
+
+        let credential = AndroidCredential::new(
+            self.java_vm.clone(),
+            self.context.clone(),
+            service,
+            user,
+            user_auth_required,
+            auth_timeout_seconds,
+        );
 
         Ok(Entry::new_with_credential(Arc::new(credential)))
     }
@@ -97,6 +115,8 @@ pub struct AndroidCredential {
     context: Context,
     service: String,
     user: String,
+    user_auth_required: bool,
+    auth_timeout_seconds: i32,
 }
 
 impl std::fmt::Debug for AndroidCredential {
@@ -109,16 +129,30 @@ impl std::fmt::Debug for AndroidCredential {
 }
 
 impl AndroidCredential {
-    pub fn new(java_vm: Arc<JavaVM>, context: Context, service: &str, user: &str) -> Self {
+    pub fn new(
+        java_vm: Arc<JavaVM>,
+        context: Context,
+        service: &str,
+        user: &str,
+        user_auth_required: bool,
+        auth_timeout_seconds: i32,
+    ) -> Self {
         Self {
             java_vm,
             context,
             service: service.to_owned(),
             user: user.to_owned(),
+            user_auth_required,
+            auth_timeout_seconds,
         }
     }
 
-    fn get_key(env: &mut JNIEnv, service: &str) -> AndroidKeyringResult<Key> {
+    fn get_key(
+        env: &mut JNIEnv,
+        service: &str,
+        user_auth_required: bool,
+        auth_timeout_seconds: i32,
+    ) -> AndroidKeyringResult<Key> {
         static SERVICE_LOCK: Mutex<()> = Mutex::new(());
         let _lock = SERVICE_LOCK.lock().unwrap();
 
@@ -128,15 +162,28 @@ impl AndroidCredential {
         Ok(match keystore.get_key(env, service)? {
             Some(key) => key,
             None => {
-                let key_generator_spec = KeyGenParameterSpecBuilder::new(
+                let builder = KeyGenParameterSpecBuilder::new(
                     env,
                     service,
                     PURPOSE_DECRYPT | PURPOSE_ENCRYPT,
                 )?
                 .set_block_modes(env, &[BLOCK_MODE_GCM])?
                 .set_encryption_paddings(env, &[ENCRYPTION_PADDING_NONE])?
-                .set_user_authentication_required(env, false)?
-                .build(env)?;
+                .set_user_authentication_required(env, user_auth_required)?;
+
+                let builder = if user_auth_required {
+                    // setUserAuthenticationValidityDurationSeconds is available on API 24+.
+                    // When timeout > 0, the key is usable for that many seconds after the
+                    // user authenticates via device lock screen.
+                    builder.set_user_authentication_validity_duration_seconds(
+                        env,
+                        auth_timeout_seconds,
+                    )?
+                } else {
+                    builder
+                };
+
+                let key_generator_spec = builder.build(env)?;
                 let key_generator = KeyGenerator::get_instance(env, KEY_ALGORITHM_AES, PROVIDER)?;
                 key_generator.init(env, key_generator_spec.into())?;
                 let key = key_generator.generate_key(env)?;
@@ -158,7 +205,7 @@ impl CredentialApi for AndroidCredential {
     fn set_secret(&self, secret: &[u8]) -> keyring_core::Result<()> {
         self.check_for_exception(|env| {
             let file = Self::get_file(env, &self.context, &self.service)?;
-            let key = Self::get_key(env, &self.service)?;
+            let key = Self::get_key(env, &self.service, self.user_auth_required, self.auth_timeout_seconds)?;
 
             let cipher = Cipher::get_instance(env, CIPHER_TRANSFORMATION)?;
             cipher.init(env, ENCRYPT_MODE, &key)?;
@@ -188,7 +235,7 @@ impl CredentialApi for AndroidCredential {
     fn get_secret(&self) -> keyring_core::Result<Vec<u8>> {
         let r = self.check_for_exception(|env| {
             let file = Self::get_file(env, &self.context, &self.service)?;
-            let key = Self::get_key(env, &self.service)?;
+            let key = Self::get_key(env, &self.service, self.user_auth_required, self.auth_timeout_seconds)?;
             let ciphertext = file.get_binary(env, &self.user)?;
 
             Ok(match ciphertext {
@@ -281,8 +328,19 @@ pub trait HasJavaVm {
         let mut env = vm.attach_current_thread()?;
         let t_result = f(&mut env);
         if env.exception_check()? {
+            let exception = env.exception_occurred()?;
             env.exception_describe()?;
             env.exception_clear()?;
+
+            // Detect Android's UserNotAuthenticatedException which is thrown
+            // when a KeyStore key requires user authentication and the user
+            // has not authenticated within the required timeout.
+            if let Ok(true) = env.is_instance_of(
+                &exception,
+                "android/security/keystore/UserNotAuthenticatedException",
+            ) {
+                return Err(AndroidKeyringError::UserNotAuthenticated);
+            }
 
             if t_result.is_ok() {
                 return Err(AndroidKeyringError::JavaExceptionThrow);
@@ -311,6 +369,8 @@ pub enum AndroidKeyringError {
     JavaExceptionThrow,
     #[error("{1}")]
     CorruptedData(Vec<u8>, CorruptedData),
+    #[error("User authentication required but not provided")]
+    UserNotAuthenticated,
 }
 impl From<AndroidKeyringError> for keyring_core::Error {
     fn from(value: AndroidKeyringError) -> Self {
@@ -323,6 +383,9 @@ impl From<AndroidKeyringError> for keyring_core::Error {
             }
             AndroidKeyringError::CorruptedData(data, error) => {
                 keyring_core::Error::BadDataFormat(data, Box::new(error))
+            }
+            e @ AndroidKeyringError::UserNotAuthenticated => {
+                keyring_core::Error::NoStorageAccess(Box::new(e))
             }
         }
     }

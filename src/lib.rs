@@ -65,12 +65,10 @@ impl Store {
         }
     }
 
-    pub fn new_with_configuration(configuration: &HashMap<&str, &str>) -> Result<Arc<Self>> {
-        if !configuration.is_empty() {
-            return Err(Error::NotSupportedByStore(
-                "The Android Keyring Store does not support configuration options".to_string(),
-            ));
-        }
+    pub fn new_with_configuration(_configuration: &HashMap<&str, &str>) -> Result<Arc<Self>> {
+        // Store-level configuration is accepted but not used; per-credential
+        // options (user-auth-required, user-auth-timeout) are passed as
+        // modifiers to `build()` and handled in AndroidCredential.
         Self::new()
     }
 }
