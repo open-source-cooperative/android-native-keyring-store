@@ -3,10 +3,12 @@ use std::{collections::HashMap, sync::Arc};
 use jni::JavaVM;
 use keyring_core::{Entry, api::CredentialStoreApi};
 
-use crate::shared_preferences::Context;
+use crate::{
+    error::{AndroidKeyringResult, HasJavaVm},
+    shared_preferences::Context,
+};
 
 use super::Cred;
-use super::{AndroidKeyringResult, HasJavaVm};
 
 pub struct Store {
     java_vm: Arc<JavaVM>,

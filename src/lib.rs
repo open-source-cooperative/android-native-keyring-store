@@ -13,6 +13,7 @@ pub mod android_log;
 pub mod by_service;
 pub mod by_store;
 pub mod cipher;
+pub mod error;
 pub mod keystore;
 pub mod methods;
 pub mod shared_preferences;

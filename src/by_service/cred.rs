@@ -5,15 +5,22 @@ use keyring_core::{Credential, api::CredentialApi};
 
 use crate::{
     cipher::{Cipher, GCMParameterSpec},
+    error::{AndroidKeyringError, AndroidKeyringResult, CorruptedData, HasJavaVm},
     keystore::{Key, KeyGenParameterSpecBuilder, KeyGenerator, KeyStore},
     shared_preferences::{Context, SharedPreferences},
 };
 
-use super::{AndroidKeyringError, AndroidKeyringResult, CorruptedData};
-use super::{
-    BLOCK_MODE_GCM, CIPHER_TRANSFORMATION, DECRYPT_MODE, ENCRYPT_MODE, ENCRYPTION_PADDING_NONE,
-    HasJavaVm, IV_LEN, KEY_ALGORITHM_AES, MODE_PRIVATE, PROVIDER, PURPOSE_DECRYPT, PURPOSE_ENCRYPT,
-};
+pub const KEY_ALGORITHM_AES: &str = "AES";
+pub const PROVIDER: &str = "AndroidKeyStore";
+pub const PURPOSE_ENCRYPT: i32 = 1;
+pub const PURPOSE_DECRYPT: i32 = 2;
+pub const BLOCK_MODE_GCM: &str = "GCM";
+pub const ENCRYPTION_PADDING_NONE: &str = "NoPadding";
+pub const MODE_PRIVATE: i32 = 0;
+pub const ENCRYPT_MODE: i32 = 1;
+pub const DECRYPT_MODE: i32 = 2;
+pub const CIPHER_TRANSFORMATION: &str = "AES/GCM/NoPadding";
+pub const IV_LEN: usize = 12;
 
 pub struct Cred {
     java_vm: Arc<JavaVM>,
@@ -128,7 +135,10 @@ impl CredentialApi for Cred {
                     if iv_len != IV_LEN {
                         return Err(AndroidKeyringError::CorruptedData(
                             data,
-                            CorruptedData::InvalidIvLen(iv_len),
+                            CorruptedData::InvalidIvLen {
+                                actual: iv_len,
+                                expected: crate::by_store::cred::IV_LEN,
+                            },
                         ));
                     }
 
