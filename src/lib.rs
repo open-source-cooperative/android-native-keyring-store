@@ -10,16 +10,17 @@ use keyring_core::{Error, Result};
 
 #[cfg(feature = "android-log")]
 pub mod android_log;
+pub mod by_service;
+pub mod by_store;
 pub mod cipher;
-pub mod credential;
 pub mod keystore;
 pub mod methods;
 pub mod shared_preferences;
 #[cfg(feature = "compile_tests")]
 pub mod tests;
 
-pub type Store = credential::AndroidStore;
-pub type Cred = credential::AndroidCredential;
+pub type Store = by_service::Store;
+pub type Cred = by_service::Cred;
 
 // package io.crates.keyring
 // import android.content.Context
@@ -59,7 +60,7 @@ pub extern "system" fn Java_io_crates_keyring_Keyring_00024Companion_initializeN
 /// Standard Store creation signature.
 impl Store {
     pub fn new() -> Result<Arc<Self>> {
-        match credential::AndroidStore::from_ndk_context() {
+        match by_service::Store::from_ndk_context() {
             Ok(store) => Ok(store),
             Err(e) => Err(e.into()),
         }

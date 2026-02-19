@@ -1,13 +1,7 @@
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-};
+use std::sync::{Arc, Mutex};
 
 use jni::{JNIEnv, JavaVM};
-use keyring_core::{
-    Credential, Entry,
-    api::{CredentialApi, CredentialStoreApi},
-};
+use keyring_core::{Credential, api::CredentialApi};
 
 use crate::{
     cipher::{Cipher, GCMParameterSpec},
@@ -15,91 +9,20 @@ use crate::{
     shared_preferences::{Context, SharedPreferences},
 };
 
-pub const KEY_ALGORITHM_AES: &str = "AES";
-pub const PROVIDER: &str = "AndroidKeyStore";
-pub const PURPOSE_ENCRYPT: i32 = 1;
-pub const PURPOSE_DECRYPT: i32 = 2;
-pub const BLOCK_MODE_GCM: &str = "GCM";
-pub const ENCRYPTION_PADDING_NONE: &str = "NoPadding";
-pub const MODE_PRIVATE: i32 = 0;
-pub const ENCRYPT_MODE: i32 = 1;
-pub const DECRYPT_MODE: i32 = 2;
-pub const CIPHER_TRANSFORMATION: &str = "AES/GCM/NoPadding";
-pub const IV_LEN: usize = 12;
+use super::{AndroidKeyringError, AndroidKeyringResult, CorruptedData};
+use super::{
+    BLOCK_MODE_GCM, CIPHER_TRANSFORMATION, DECRYPT_MODE, ENCRYPT_MODE, ENCRYPTION_PADDING_NONE,
+    HasJavaVm, IV_LEN, KEY_ALGORITHM_AES, MODE_PRIVATE, PROVIDER, PURPOSE_DECRYPT, PURPOSE_ENCRYPT,
+};
 
-pub struct AndroidStore {
-    java_vm: Arc<JavaVM>,
-    context: Context,
-    instance_id: String,
-}
-
-impl std::fmt::Debug for AndroidStore {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Store")
-            .field("vendor", &self.vendor())
-            .field("id", &self.id())
-            .field("context", &self.context.id())
-            .finish()
-    }
-}
-
-impl AndroidStore {
-    /// Initializes AndroidBuilder using the JNI context available
-    /// on the `ndk-context` crate.
-    pub fn from_ndk_context() -> AndroidKeyringResult<Arc<Self>> {
-        let ctx = ndk_context::android_context();
-        let vm = ctx.vm().cast();
-        let activity = ctx.context();
-
-        let java_vm = unsafe { JavaVM::from_raw(vm)? };
-        let env = java_vm.attach_current_thread()?;
-
-        let j_context = unsafe { jni::objects::JObject::from_raw(activity as jni::sys::jobject) };
-        let context = Context::new(&env, j_context)?;
-        let java_vm = Arc::new(env.get_java_vm()?);
-        let instance_id = generate_instance_id();
-        Ok(Arc::new(Self { java_vm, context, instance_id }))
-    }
-}
-
-impl CredentialStoreApi for AndroidStore {
-    fn vendor(&self) -> String {
-        "Android SharedPreferences/KeyStore, https://github.com/open-source-cooperative/android-native-keyring-store".to_string()
-    }
-
-    fn id(&self) -> String {
-        self.instance_id.clone()
-    }
-
-    fn build(
-        &self,
-        service: &str,
-        user: &str,
-        _modifiers: Option<&HashMap<&str, &str>>,
-    ) -> keyring_core::Result<Entry> {
-        let credential =
-            AndroidCredential::new(self.java_vm.clone(), self.context.clone(), service, user);
-
-        Ok(Entry::new_with_credential(Arc::new(credential)))
-    }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
-    fn debug_fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Debug::fmt(self, f)
-    }
-}
-
-pub struct AndroidCredential {
+pub struct Cred {
     java_vm: Arc<JavaVM>,
     context: Context,
     service: String,
     user: String,
 }
 
-impl std::fmt::Debug for AndroidCredential {
+impl std::fmt::Debug for Cred {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("AndroidCredential")
             .field("service", &self.service)
@@ -108,7 +31,7 @@ impl std::fmt::Debug for AndroidCredential {
     }
 }
 
-impl AndroidCredential {
+impl Cred {
     pub fn new(java_vm: Arc<JavaVM>, context: Context, service: &str, user: &str) -> Self {
         Self {
             java_vm,
@@ -154,7 +77,7 @@ impl AndroidCredential {
     }
 }
 
-impl CredentialApi for AndroidCredential {
+impl CredentialApi for Cred {
     fn set_secret(&self, secret: &[u8]) -> keyring_core::Result<()> {
         self.check_for_exception(|env| {
             let file = Self::get_file(env, &self.context, &self.service)?;
@@ -271,90 +194,8 @@ impl CredentialApi for AndroidCredential {
     }
 }
 
-pub trait HasJavaVm {
-    fn java_vm(&self) -> &JavaVM;
-    fn check_for_exception<T, F>(&self, f: F) -> AndroidKeyringResult<T>
-    where
-        F: FnOnce(&mut JNIEnv) -> AndroidKeyringResult<T>,
-    {
-        let vm = self.java_vm();
-        let mut env = vm.attach_current_thread()?;
-        let t_result = f(&mut env);
-        if env.exception_check()? {
-            env.exception_describe()?;
-            env.exception_clear()?;
-
-            if t_result.is_ok() {
-                return Err(AndroidKeyringError::JavaExceptionThrow);
-            }
-        }
-
-        t_result
-    }
-}
-impl HasJavaVm for AndroidStore {
+impl HasJavaVm for Cred {
     fn java_vm(&self) -> &JavaVM {
         &self.java_vm
     }
-}
-impl HasJavaVm for AndroidCredential {
-    fn java_vm(&self) -> &JavaVM {
-        &self.java_vm
-    }
-}
-
-#[derive(thiserror::Error, Debug)]
-pub enum AndroidKeyringError {
-    #[error(transparent)]
-    JniError(#[from] jni::errors::Error),
-    #[error("Java exception was thrown")]
-    JavaExceptionThrow,
-    #[error("{1}")]
-    CorruptedData(Vec<u8>, CorruptedData),
-}
-impl From<AndroidKeyringError> for keyring_core::Error {
-    fn from(value: AndroidKeyringError) -> Self {
-        match value {
-            AndroidKeyringError::JniError(error) => {
-                keyring_core::Error::PlatformFailure(Box::new(error))
-            }
-            e @ AndroidKeyringError::JavaExceptionThrow => {
-                keyring_core::Error::PlatformFailure(Box::new(e))
-            }
-            AndroidKeyringError::CorruptedData(data, error) => {
-                keyring_core::Error::BadDataFormat(data, Box::new(error))
-            }
-        }
-    }
-}
-type AndroidKeyringResult<T> = Result<T, AndroidKeyringError>;
-
-#[derive(thiserror::Error, Debug)]
-pub enum CorruptedData {
-    #[error("IV length not specified on entry")]
-    MissingIvLen,
-    #[error("IV length in data is {0}, but should be {expected}", expected=IV_LEN)]
-    InvalidIvLen(usize),
-    #[error("Data is too small to contain IV and ciphertext, length = {0}")]
-    DataTooSmall(usize),
-    #[error("Verification of data signature/MAC failed")]
-    DecryptionFailure,
-}
-
-
-fn generate_instance_id() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    let now = SystemTime::now();
-    let elapsed = if now.lt(&UNIX_EPOCH) {
-        UNIX_EPOCH.duration_since(now).unwrap()
-    } else {
-        now.duration_since(UNIX_EPOCH).unwrap()
-    };
-
-    format!(
-        "Crate version {}, Instantiated at {}",
-        env!("CARGO_PKG_VERSION"),
-        elapsed.as_secs_f64()
-    )
 }

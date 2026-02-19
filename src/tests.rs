@@ -1,5 +1,5 @@
 use crate::{
-    credential::{
+    by_service::{
         BLOCK_MODE_GCM, CorruptedData, ENCRYPTION_PADDING_NONE, KEY_ALGORITHM_AES, MODE_PRIVATE,
         PROVIDER, PURPOSE_DECRYPT, PURPOSE_ENCRYPT,
     },
@@ -26,7 +26,7 @@ pub extern "system" fn Java_io_crates_keyring_KeyringTests_00024Companion_runTes
     context: JObject,
 ) {
     let context = Context::new(&env, context).unwrap();
-    match crate::Store::new() {
+    match crate::by_service::Store::new() {
         Ok(store) => {
             keyring_core::set_default_store(store);
             let msg = c"Successfully created store from ndk-context";
@@ -35,7 +35,7 @@ pub extern "system" fn Java_io_crates_keyring_KeyringTests_00024Companion_runTes
             unsafe {
                 __android_log_write(level, tag.as_ptr(), msg.as_ptr());
             }
-        },
+        }
         Err(e) => {
             let message = format!("Failed to create AndroidKeyStore: {e}");
             let msg = CString::new(message).unwrap();
