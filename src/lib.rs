@@ -1,38 +1,54 @@
-use std::collections::HashMap;
 use std::ffi::c_void;
-use std::sync::{Arc, OnceLock};
+use std::sync::OnceLock;
 
 use jni::{
     JNIEnv,
     objects::{GlobalRef, JObject},
 };
-use keyring_core::{Error, Result};
+
+pub mod by_store;
+pub use by_store::Cred;
+pub use by_store::Store;
+
+pub mod by_service;
+pub use by_service::Cred as LegacyCred;
+pub use by_service::Store as LegacyStore;
 
 #[cfg(feature = "android-log")]
-pub mod android_log;
-pub mod by_service;
-pub mod by_store;
-pub mod cipher;
-pub mod error;
-pub mod keystore;
-pub mod methods;
-pub mod shared_preferences;
+mod android_log;
+mod cipher;
+mod consts;
+mod error;
+mod keystore;
+mod methods;
+mod shared_preferences;
+
 #[cfg(feature = "compile_tests")]
-pub mod tests;
+pub mod by_service_tests;
+#[cfg(feature = "compile_tests")]
+pub mod by_store_tests;
 
-pub type Store = by_service::Store;
-pub type Cred = by_service::Cred;
-
-// package io.crates.keyring
-// import android.content.Context
-// class Keyring {
-//     companion object {
-//         init {
-//             System.loadLibrary("android_native_keyring_store")
-//         }
-//         external fun initializeNdkContext(context: Context);
-//     }
-// }
+/// Initialize the NDK context.
+///
+/// This JNI function can be called from your application's Java
+/// code to prepare the NDK context for use by this crate.
+/// (Some Android application frameworks do this for you.)
+///
+/// You can invoke this function automatically by defining it as
+/// a companion object's `init` function, as shown in the example
+/// below.
+/// ```java
+/// package io.crates.keyring
+/// import android.content.Context
+/// class Keyring {
+///     companion object {
+///         init {
+///             System.loadLibrary("android_native_keyring_store")
+///         }
+///         external fun initializeNdkContext(context: Context);
+///     }
+/// }
+/// ```
 #[allow(non_snake_case)]
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_io_crates_keyring_Keyring_00024Companion_initializeNdkContext(
@@ -56,23 +72,4 @@ pub extern "system" fn Java_io_crates_keyring_Keyring_00024Companion_initializeN
             None
         }
     });
-}
-
-/// Standard Store creation signature.
-impl Store {
-    pub fn new() -> Result<Arc<Self>> {
-        match by_service::Store::from_ndk_context() {
-            Ok(store) => Ok(store),
-            Err(e) => Err(e.into()),
-        }
-    }
-
-    pub fn new_with_configuration(configuration: &HashMap<&str, &str>) -> Result<Arc<Self>> {
-        if !configuration.is_empty() {
-            return Err(Error::NotSupportedByStore(
-                "The Android Keyring Store does not support configuration options".to_string(),
-            ));
-        }
-        Self::new()
-    }
 }

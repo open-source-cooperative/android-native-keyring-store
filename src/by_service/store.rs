@@ -95,7 +95,7 @@ fn generate_instance_id() -> String {
     };
 
     format!(
-        "Crate version {}, Instantiated at {}",
+        "One File per Service storage, Crate version {}, Instantiated at {}",
         env!("CARGO_PKG_VERSION"),
         elapsed.as_secs_f64()
     )

@@ -137,7 +137,7 @@ impl CredentialApi for Cred {
                             data,
                             CorruptedData::InvalidIvLen {
                                 actual: iv_len,
-                                expected: crate::by_store::cred::IV_LEN,
+                                expected: IV_LEN,
                             },
                         ));
                     }

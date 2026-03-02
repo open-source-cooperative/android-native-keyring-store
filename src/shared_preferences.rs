@@ -10,11 +10,16 @@ use std::marker::PhantomData;
 pub struct Context {
     self_: GlobalRef,
 }
+
 impl Context {
     pub fn new(env: &JNIEnv, obj: JObject) -> JResult<Self> {
         Ok(Self {
             self_: env.new_global_ref(obj)?,
         })
+    }
+
+    pub fn from_raw(self_: GlobalRef) -> Self {
+        Self { self_ }
     }
 
     pub fn get_shared_preferences(
@@ -42,6 +47,7 @@ impl Context {
 pub struct SharedPreferences {
     self_: GlobalRef,
 }
+
 impl FromValue for SharedPreferences {
     fn signature() -> SignatureComp {
         Self::class().into()
@@ -51,9 +57,21 @@ impl FromValue for SharedPreferences {
         Ok(Self { self_ })
     }
 }
+
 impl SharedPreferences {
     fn class() -> ClassDecl {
         ClassDecl("Landroid/content/SharedPreferences;")
+    }
+
+    pub fn contains(&self, env: &mut JNIEnv, key: &str) -> JResult<bool> {
+        struct ThisMethod<'a>(PhantomData<&'a ()>);
+        impl<'a> Method for ThisMethod<'a> {
+            type Param = &'a str;
+            type Return = bool;
+
+            const NAME: &'static str = "contains";
+        }
+        ThisMethod::call(&self.self_, env, key)
     }
 
     pub fn get_string(&self, env: &mut JNIEnv, key: &str) -> JResult<Option<String>> {

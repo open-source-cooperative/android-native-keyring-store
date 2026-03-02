@@ -8,6 +8,8 @@ pub enum AndroidKeyringError {
     JavaExceptionThrow,
     #[error("{1}")]
     CorruptedData(Vec<u8>, CorruptedData),
+    #[error(transparent)]
+    KeyringError(#[from] keyring_core::Error),
 }
 
 impl From<AndroidKeyringError> for keyring_core::Error {
@@ -22,6 +24,7 @@ impl From<AndroidKeyringError> for keyring_core::Error {
             AndroidKeyringError::CorruptedData(data, error) => {
                 keyring_core::Error::BadDataFormat(data, Box::new(error))
             }
+            AndroidKeyringError::KeyringError(error) => error,
         }
     }
 }

@@ -1,15 +1,19 @@
+use std::ffi::CString;
+
+use android_log_sys::{__android_log_write, LogPriority};
+use jni::{JNIEnv, JavaVM, objects::JObject};
+
+use keyring_core::Entry;
+
 use crate::{
-    by_service::{
-        BLOCK_MODE_GCM, CorruptedData, ENCRYPTION_PADDING_NONE, KEY_ALGORITHM_AES, MODE_PRIVATE,
-        PROVIDER, PURPOSE_DECRYPT, PURPOSE_ENCRYPT,
+    by_service::cred::{
+        BLOCK_MODE_GCM, ENCRYPTION_PADDING_NONE, KEY_ALGORITHM_AES, MODE_PRIVATE, PROVIDER,
+        PURPOSE_DECRYPT, PURPOSE_ENCRYPT,
     },
+    error::CorruptedData,
     keystore::{KeyGenParameterSpecBuilder, KeyGenerator},
     shared_preferences::Context,
 };
-use android_log_sys::{__android_log_write, LogPriority};
-use jni::{JNIEnv, JavaVM, objects::JObject};
-use keyring_core::Entry;
-use std::ffi::CString;
 
 // package io.crates.keyring
 // import android.content.Context
@@ -20,16 +24,16 @@ use std::ffi::CString;
 // }
 #[allow(non_snake_case)]
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_io_crates_keyring_KeyringTests_00024Companion_runTests(
+pub extern "system" fn Java_io_crates_keyring_KeyringTests_00024Companion_runByServiceTests(
     env: JNIEnv,
     _class: JObject,
     context: JObject,
 ) {
     let context = Context::new(&env, context).unwrap();
-    match crate::by_service::Store::new() {
+    match crate::LegacyStore::from_ndk_context() {
         Ok(store) => {
             keyring_core::set_default_store(store);
-            let msg = c"Successfully created store from ndk-context";
+            let msg = c"Successfully created Legacy (by-service) store";
             let tag = c"unit-test";
             let level = LogPriority::INFO as i32;
             unsafe {
@@ -37,7 +41,7 @@ pub extern "system" fn Java_io_crates_keyring_KeyringTests_00024Companion_runTes
             }
         }
         Err(e) => {
-            let message = format!("Failed to create AndroidKeyStore: {e}");
+            let message = format!("Failed to create Legacy (by-service) store: {e}");
             let msg = CString::new(message).unwrap();
             let tag = c"unit-test";
             let level = LogPriority::ERROR as i32;
@@ -47,6 +51,11 @@ pub extern "system" fn Java_io_crates_keyring_KeyringTests_00024Companion_runTes
             return;
         }
     }
+    run_store_tests(env, context);
+    keyring_core::unset_default_store();
+}
+
+fn run_store_tests(env: JNIEnv, context: Context) {
     let testing = [
         ("golden_path", golden_path as fn(JavaVM, Context)),
         ("delete_credential", delete_credential),
@@ -85,8 +94,7 @@ pub extern "system" fn Java_io_crates_keyring_KeyringTests_00024Companion_runTes
             __android_log_write(level, tag.as_ptr(), msg.as_ptr());
         }
     }
-    keyring_core::unset_default_store();
-    let msg = c"All tests complete";
+    let msg = c"All by-service tests passed";
     let tag = c"unit-test";
     let level = LogPriority::INFO as i32;
     unsafe {
@@ -211,7 +219,10 @@ fn invalid_iv(vm: JavaVM, ctx: Context) {
     match entry1.get_password() {
         Err(keyring_core::Error::BadDataFormat(_, error)) => {
             match error.downcast::<CorruptedData>().as_deref() {
-                Ok(&CorruptedData::InvalidIvLen(31)) => (),
+                Ok(&CorruptedData::InvalidIvLen {
+                    actual: 31,
+                    expected: 12,
+                }) => (),
                 x => panic!("unexpected result on corrupted get_password(): {x:?}"),
             }
         }
