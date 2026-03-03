@@ -4,7 +4,6 @@ package io.crates.keyring
 
  class KeyringTests {
      companion object {
-         external fun runByServiceTests(context: Context);
-         external fun runByStoreTests(context: Context);
+         external fun runAllTests(context: Context);
      }
  }

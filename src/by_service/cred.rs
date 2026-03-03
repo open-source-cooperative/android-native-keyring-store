@@ -3,24 +3,16 @@ use std::sync::{Arc, Mutex};
 use jni::{JNIEnv, JavaVM};
 use keyring_core::{Credential, api::CredentialApi};
 
+use crate::crypto::{decrypt, encrypt};
 use crate::{
-    cipher::{Cipher, GCMParameterSpec},
-    error::{AndroidKeyringError, AndroidKeyringResult, CorruptedData, HasJavaVm},
-    keystore::{Key, KeyGenParameterSpecBuilder, KeyGenerator, KeyStore},
-    shared_preferences::{Context, SharedPreferences},
+    error::{AndroidKeyringResult, HasJavaVm},
+    keystore::{
+        BLOCK_MODE_GCM, ENCRYPTION_PADDING_NONE, KEY_ALGORITHM_AES, Key,
+        KeyGenParameterSpecBuilder, KeyGenerator, KeyStore, PROVIDER, PURPOSE_DECRYPT,
+        PURPOSE_ENCRYPT,
+    },
+    shared_preferences::{Context, MODE_PRIVATE, SharedPreferences},
 };
-
-pub const KEY_ALGORITHM_AES: &str = "AES";
-pub const PROVIDER: &str = "AndroidKeyStore";
-pub const PURPOSE_ENCRYPT: i32 = 1;
-pub const PURPOSE_DECRYPT: i32 = 2;
-pub const BLOCK_MODE_GCM: &str = "GCM";
-pub const ENCRYPTION_PADDING_NONE: &str = "NoPadding";
-pub const MODE_PRIVATE: i32 = 0;
-pub const ENCRYPT_MODE: i32 = 1;
-pub const DECRYPT_MODE: i32 = 2;
-pub const CIPHER_TRANSFORMATION: &str = "AES/GCM/NoPadding";
-pub const IV_LEN: usize = 12;
 
 pub struct Cred {
     java_vm: Arc<JavaVM>,
@@ -89,26 +81,9 @@ impl CredentialApi for Cred {
         self.check_for_exception(|env| {
             let file = Self::get_file(env, &self.context, &self.service)?;
             let key = Self::get_key(env, &self.service)?;
-
-            let cipher = Cipher::get_instance(env, CIPHER_TRANSFORMATION)?;
-            cipher.init(env, ENCRYPT_MODE, &key)?;
-            let iv = cipher.get_iv(env)?;
-            assert_eq!(
-                iv.len(),
-                IV_LEN,
-                "IV should always be 12 bytes, please file a bug report"
-            );
-            let ciphertext = cipher.do_final(env, secret)?;
-
-            let iv_len = iv.len() as u8;
-
+            let ciphertext = encrypt(env, key, secret)?;
             let edit = file.edit(env)?;
-            let mut value = vec![iv_len];
-            value.extend_from_slice(&iv);
-            value.extend_from_slice(&ciphertext);
-            edit.put_binary(env, &self.user, &value)?;
-            edit.commit(env)?;
-
+            edit.put_binary(env, &self.user, &ciphertext)?.commit(env)?;
             Ok(())
         })?;
 
@@ -120,48 +95,9 @@ impl CredentialApi for Cred {
             let file = Self::get_file(env, &self.context, &self.service)?;
             let key = Self::get_key(env, &self.service)?;
             let ciphertext = file.get_binary(env, &self.user)?;
-
             Ok(match ciphertext {
                 Some(data) => {
-                    if data.is_empty() {
-                        return Err(AndroidKeyringError::CorruptedData(
-                            data,
-                            CorruptedData::MissingIvLen,
-                        ));
-                    }
-
-                    let iv_len = data[0] as usize;
-
-                    if iv_len != IV_LEN {
-                        return Err(AndroidKeyringError::CorruptedData(
-                            data,
-                            CorruptedData::InvalidIvLen {
-                                actual: iv_len,
-                                expected: IV_LEN,
-                            },
-                        ));
-                    }
-
-                    let ciphertext = &data[1..];
-                    let ciphertext_len = ciphertext.len();
-                    if ciphertext_len <= iv_len {
-                        return Err(AndroidKeyringError::CorruptedData(
-                            data,
-                            CorruptedData::DataTooSmall(ciphertext_len),
-                        ));
-                    }
-
-                    let iv = &ciphertext[..iv_len];
-                    let iv = &iv[..iv_len];
-                    let ciphertext = &ciphertext[iv_len..];
-
-                    let spec = GCMParameterSpec::new(env, 128, iv)?;
-                    let cipher = Cipher::get_instance(env, CIPHER_TRANSFORMATION)?;
-                    cipher.init2(env, DECRYPT_MODE, &key, spec.into())?;
-                    let plaintext = cipher.do_final(env, ciphertext).map_err(move |_| {
-                        AndroidKeyringError::CorruptedData(data, CorruptedData::DecryptionFailure)
-                    })?;
-
+                    let plaintext = decrypt(env, key, data)?;
                     Some(plaintext)
                 }
                 None => None,

@@ -4,10 +4,13 @@ use jni::{JNIEnv, JavaVM, objects::GlobalRef};
 use keyring_core::{Error, Result};
 
 use crate::{
-    consts::AndroidConstants,
     error::AndroidKeyringResult,
-    keystore::{Key, KeyGenParameterSpecBuilder, KeyGenerator, KeyStore},
-    shared_preferences::{Context, SharedPreferences},
+    keystore::{
+        BLOCK_MODE_GCM, ENCRYPTION_PADDING_NONE, KEY_ALGORITHM_AES, Key,
+        KeyGenParameterSpecBuilder, KeyGenerator, KeyStore, PROVIDER, PURPOSE_DECRYPT,
+        PURPOSE_ENCRYPT,
+    },
+    shared_preferences::{Context, MODE_PRIVATE, SharedPreferences},
 };
 
 use super::store::StoreConfig;
@@ -102,8 +105,6 @@ impl std::fmt::Debug for Vault {
     }
 }
 
-impl AndroidConstants for Vault {}
-
 const CONFIG_KEY: &str = "vaultConfig";
 
 impl Vault {
@@ -176,10 +177,20 @@ impl Vault {
     fn delete(&self) -> Result<()> {
         log::debug!("Deleting vault with config {:?}", self.config);
         self.with_env(|env| {
-            let file = self.get_file(env)?;
-            let editor = file.edit(env)?;
-            editor.remove(env, CONFIG_KEY)?.commit(env)?;
             self.delete_key(env)?;
+            if !self.delete_file(env)? {
+                log::warn!("Failed to find file {:?}", self.config.filename);
+            }
+            Ok(())
+        })?;
+        Ok(())
+    }
+
+    #[cfg(feature = "compile_tests")]
+    pub fn change_key(&self) -> Result<()> {
+        self.with_env(|env| {
+            self.delete_key(env)?;
+            self.create_key(env)?;
             Ok(())
         })?;
         Ok(())
@@ -219,7 +230,7 @@ impl Vault {
         let _lock = KEY_SERVICE_LOCK
             .lock()
             .expect("Key service lock poisoned: report a bug!");
-        let keystore = KeyStore::get_instance(env, Vault::PROVIDER)?;
+        let keystore = KeyStore::get_instance(env, PROVIDER)?;
         keystore.load(env)?;
         if keystore.contains_alias(env, &self.config.filename)? {
             let err = "Encryption key already exists";
@@ -228,14 +239,13 @@ impl Vault {
         let key_generator_spec = KeyGenParameterSpecBuilder::new(
             env,
             &self.config.filename,
-            Vault::PURPOSE_DECRYPT | Vault::PURPOSE_ENCRYPT,
+            PURPOSE_DECRYPT | PURPOSE_ENCRYPT,
         )?
-        .set_block_modes(env, &[Vault::BLOCK_MODE_GCM])?
-        .set_encryption_paddings(env, &[Vault::ENCRYPTION_PADDING_NONE])?
+        .set_block_modes(env, &[BLOCK_MODE_GCM])?
+        .set_encryption_paddings(env, &[ENCRYPTION_PADDING_NONE])?
         .set_user_authentication_required(env, false)?
         .build(env)?;
-        let key_generator =
-            KeyGenerator::get_instance(env, Vault::KEY_ALGORITHM_AES, Vault::PROVIDER)?;
+        let key_generator = KeyGenerator::get_instance(env, KEY_ALGORITHM_AES, PROVIDER)?;
         key_generator.init(env, key_generator_spec.into())?;
         let key = key_generator.generate_key(env)?;
         Ok(key.into())
@@ -245,7 +255,7 @@ impl Vault {
         let _lock = KEY_SERVICE_LOCK
             .lock()
             .expect("Key service lock poisoned: report a bug!");
-        let keystore = KeyStore::get_instance(env, Vault::PROVIDER)?;
+        let keystore = KeyStore::get_instance(env, PROVIDER)?;
         keystore.load(env)?;
         if let Some(key) = keystore.get_key(env, &self.config.filename)? {
             Ok(key)
@@ -255,10 +265,11 @@ impl Vault {
     }
 
     fn delete_key(&self, env: &mut JNIEnv) -> AndroidKeyringResult<()> {
+        log::debug!("Deleting key for {:?}", self.config.filename);
         let _lock = KEY_SERVICE_LOCK
             .lock()
             .expect("Key service lock poisoned: report a bug!");
-        let keystore = KeyStore::get_instance(env, Vault::PROVIDER)?;
+        let keystore = KeyStore::get_instance(env, PROVIDER)?;
         keystore.load(env)?;
         keystore.delete_entry(env, &self.config.filename)?;
         Ok(())
@@ -266,7 +277,13 @@ impl Vault {
 
     pub fn get_file(&self, env: &mut JNIEnv) -> AndroidKeyringResult<SharedPreferences> {
         let ctx = Context::from_raw(self.context.clone());
-        Ok(ctx.get_shared_preferences(env, &self.config.filename, Vault::MODE_PRIVATE)?)
+        Ok(ctx.get_shared_preferences(env, &self.config.filename, MODE_PRIVATE)?)
+    }
+
+    pub fn delete_file(&self, env: &mut JNIEnv) -> AndroidKeyringResult<bool> {
+        log::debug!("Deleting file for {:?}", self.config.filename);
+        let ctx = Context::from_raw(self.context.clone());
+        Ok(ctx.delete_shared_preferences(env, &self.config.filename)?)
     }
 }
 

@@ -6,6 +6,8 @@ use jni::{
 };
 use std::marker::PhantomData;
 
+pub const MODE_PRIVATE: i32 = 0;
+
 #[derive(Clone)]
 pub struct Context {
     self_: GlobalRef,
@@ -37,6 +39,18 @@ impl Context {
         }
 
         ThisMethod::call(&self.self_, env, (name, mode))
+    }
+
+    pub fn delete_shared_preferences(&self, env: &mut JNIEnv, name: &str) -> JResult<bool> {
+        struct ThisMethod<'a>(PhantomData<&'a ()>);
+        impl<'a> Method for ThisMethod<'a> {
+            type Param = &'a str;
+            type Return = bool;
+
+            const NAME: &'static str = "deleteSharedPreferences";
+        }
+
+        ThisMethod::call(&self.self_, env, name)
     }
 
     pub fn id(&self) -> usize {

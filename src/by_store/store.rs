@@ -103,6 +103,15 @@ impl Store {
         let config = StoreConfig::from_configuration(configuration)?;
         delete(&config)
     }
+
+    #[cfg(feature = "compile_tests")]
+    pub fn change_key(&self) -> Result<()> {
+        let vault = self
+            .vault
+            .lock()
+            .expect("Vault lock poisoned: report a bug!");
+        vault.change_key()
+    }
 }
 
 impl CredentialStoreApi for Store {

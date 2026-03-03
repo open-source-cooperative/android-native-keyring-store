@@ -21,8 +21,7 @@ class MainActivity : AppCompatActivity() {
             insets
         }
         KeyringLog.setLog("android_native_keyring_store=trace")
-        KeyringTests.runByServiceTests(applicationContext)
-        KeyringTests.runByStoreTests(applicationContext)
+        KeyringTests.runAllTests(applicationContext)
         setContentView(R.layout.finish_tests)
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main)) { v, insets ->
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())

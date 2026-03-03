@@ -17,16 +17,14 @@ pub use by_service::Store as LegacyStore;
 #[cfg(feature = "android-log")]
 mod android_log;
 mod cipher;
-mod consts;
+mod crypto;
 mod error;
 mod keystore;
 mod methods;
 mod shared_preferences;
 
 #[cfg(feature = "compile_tests")]
-pub mod by_service_tests;
-#[cfg(feature = "compile_tests")]
-pub mod by_store_tests;
+pub mod tests;
 
 /// Initialize the NDK context.
 ///

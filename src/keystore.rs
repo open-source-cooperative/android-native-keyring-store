@@ -1,12 +1,21 @@
-use crate::methods::{
-    ClassDecl, Constructible, FromValue, JResult, Method, NoParam, SignatureComp, StaticMethod,
-    ToValue,
-};
+use std::marker::PhantomData;
+
 use jni::{
     JNIEnv,
     objects::{GlobalRef, JObject, JValueGen},
 };
-use std::marker::PhantomData;
+
+use crate::methods::{
+    ClassDecl, Constructible, FromValue, JResult, Method, NoParam, SignatureComp, StaticMethod,
+    ToValue,
+};
+
+pub const BLOCK_MODE_GCM: &str = "GCM";
+pub const ENCRYPTION_PADDING_NONE: &str = "NoPadding";
+pub const KEY_ALGORITHM_AES: &str = "AES";
+pub const PROVIDER: &str = "AndroidKeyStore";
+pub const PURPOSE_ENCRYPT: i32 = 1;
+pub const PURPOSE_DECRYPT: i32 = 2;
 
 pub struct KeyStore {
     self_: GlobalRef,
