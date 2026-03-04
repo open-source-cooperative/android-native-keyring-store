@@ -2,7 +2,9 @@ use android_log_sys::{__android_log_write, LogPriority};
 use jni::{JNIEnv, objects::JObject};
 use std::ffi::CString;
 
-use crate::shared_preferences::Context;
+use keyring_core::Result;
+
+use crate::{by_store::clear_vault_list, shared_preferences::Context};
 
 mod crypto_tests;
 pub mod legacy_tests;
@@ -38,11 +40,24 @@ pub extern "system" fn Java_io_crates_keyring_KeyringTests_00024Companion_runAll
     unsafe {
         __android_log_write(level, tag.as_ptr(), msg.as_ptr());
     }
-    cleanup();
+    match cleanup() {
+        Ok(()) => log::info!("Successfully cleaned up tests"),
+        Err(e) => {
+            let msg = CString::new(format!("Failed to clean up tests: {e}")).unwrap();
+            let tag = c"unit-test";
+            let level = LogPriority::ERROR as i32;
+            unsafe {
+                __android_log_write(level, tag.as_ptr(), msg.as_ptr());
+            }
+        }
+    }
 }
 
-pub fn cleanup() {
-    _ = legacy_tests::cleanup();
-    _ = store_tests::cleanup();
-    _ = crypto_tests::cleanup();
+pub fn cleanup() -> Result<()> {
+    legacy_tests::setup()?;
+    legacy_tests::teardown()?;
+    clear_vault_list();
+    store_tests::cleanup()?;
+    crypto_tests::cleanup()?;
+    Ok(())
 }

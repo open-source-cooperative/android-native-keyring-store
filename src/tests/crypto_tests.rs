@@ -39,6 +39,12 @@ pub fn run_tests(env: JNIEnv, context: Context) -> (usize, usize) {
     })
     .collect::<Vec<_>>();
 
+    let msg = c"Running shared crypto tests...";
+    let tag = c"unit-test";
+    let level = LogPriority::INFO as i32;
+    unsafe {
+        __android_log_write(level, tag.as_ptr(), msg.as_ptr());
+    }
     let mut successes = 0;
     let mut failures = 0;
     for (name, testing) in testing {
@@ -94,12 +100,6 @@ fn setup(_vm: JavaVM, _context: Context) -> keyring_core::Result<()> {
     let store_config = HashMap::from(STORE_CONFIG);
     let store = crate::Store::new_with_configuration(&store_config)?;
     log::info!("Store initialized with config: {:?}", store_config);
-    let msg = c"Successfully created crypto-test Store";
-    let tag = c"unit-test";
-    let level = LogPriority::INFO as i32;
-    unsafe {
-        __android_log_write(level, tag.as_ptr(), msg.as_ptr());
-    }
     keyring_core::set_default_store(store);
     Ok(())
 }

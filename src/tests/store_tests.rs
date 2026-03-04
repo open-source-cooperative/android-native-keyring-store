@@ -12,6 +12,7 @@ pub fn run_tests() -> (usize, usize) {
         ("golden_path", golden_path),
         ("delete_credential", delete_credential),
         ("concurrent_access", concurrent_access),
+        ("search", search),
         ("teardown", teardown),
     ]
     .iter()
@@ -27,6 +28,12 @@ pub fn run_tests() -> (usize, usize) {
     })
     .collect::<Vec<_>>();
 
+    let msg = c"Running Store tests...";
+    let tag = c"unit-test";
+    let level = LogPriority::INFO as i32;
+    unsafe {
+        __android_log_write(level, tag.as_ptr(), msg.as_ptr());
+    }
     let mut successes = 0;
     let mut failures = 0;
     for (name, testing) in testing {
@@ -78,12 +85,6 @@ fn setup() -> keyring_core::Result<()> {
     let store_config = HashMap::from(STORE_CONFIG);
     let store = crate::Store::new_with_configuration(&store_config)?;
     log::info!("Store initialized with config: {:?}", store_config);
-    let msg = c"Successfully created Store";
-    let tag = c"unit-test";
-    let level = LogPriority::INFO as i32;
-    unsafe {
-        __android_log_write(level, tag.as_ptr(), msg.as_ptr());
-    }
     keyring_core::set_default_store(store);
     Ok(())
 }
@@ -195,6 +196,28 @@ fn concurrent_access() -> keyring_core::Result<()> {
     match entry.get_password() {
         Ok(s) => log::debug!("thread {s} finished last"),
         Err(e) => return Err(e),
+    }
+    Ok(())
+}
+
+fn search() -> keyring_core::Result<()> {
+    Entry::new("search-service-only", "search-user-as-well")?.set_password("p")?;
+    Entry::new("search-service-as-well", "search-user-only")?.set_password("p")?;
+    let all = Entry::search(&HashMap::new())?;
+    let all_specifiers: Vec<(String, String)> =
+        all.iter().map(|e| e.get_specifiers().unwrap()).collect();
+    log::info!("There are {} entries:\n{all_specifiers:?}", all.len());
+    let user_only = Entry::search(&HashMap::from([("user", "only")]))?;
+    if user_only.len() != 1 {
+        return bad_result("user-only", &format!("1, got {}", user_only.len()));
+    }
+    let service_only = Entry::search(&HashMap::from([("service", "only")]))?;
+    if service_only.len() != 1 {
+        return bad_result("service-only", &format!("1, got {}", service_only.len()));
+    }
+    let both = Entry::search(&HashMap::from([("id", "only")]))?;
+    if both.len() != 2 {
+        return bad_result("both", &format!("2, got {}", both.len()));
     }
     Ok(())
 }

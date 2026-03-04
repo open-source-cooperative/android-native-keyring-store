@@ -88,6 +88,14 @@ pub fn delete(config: &StoreConfig) -> Result<bool> {
     Ok(false)
 }
 
+#[cfg(feature = "compile_tests")]
+pub fn clear_vault_list() {
+    VAULTS
+        .lock()
+        .expect("Vaults list lock poisoned: report a bug!")
+        .clear();
+}
+
 /// A Vault holds credentials securely in a single SharedPreferences file.
 ///
 /// There is an associated key in the Android Keystore that encrypts credential secrets.

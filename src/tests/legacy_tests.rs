@@ -26,6 +26,12 @@ pub fn run_tests() -> (usize, usize) {
     })
     .collect::<Vec<_>>();
 
+    let msg = c"Running LegacyStore tests...";
+    let tag = c"unit-test";
+    let level = LogPriority::INFO as i32;
+    unsafe {
+        __android_log_write(level, tag.as_ptr(), msg.as_ptr());
+    }
     let mut successes = 0;
     let mut failures = 0;
     for (name, testing) in testing {
@@ -70,25 +76,20 @@ fn bad_result(op: &str, msg: &str) -> keyring_core::Result<()> {
     ))
 }
 
-fn setup() -> keyring_core::Result<()> {
+pub(crate) fn setup() -> keyring_core::Result<()> {
     let store = crate::LegacyStore::from_ndk_context()?;
-    let msg = c"Successfully created LegacyStore";
-    let tag = c"unit-test";
-    let level = LogPriority::INFO as i32;
-    unsafe {
-        __android_log_write(level, tag.as_ptr(), msg.as_ptr());
-    }
+    log::info!("Successfully created LegacyStore");
     keyring_core::set_default_store(store);
     cleanup()?;
     Ok(())
 }
 
-fn teardown() -> keyring_core::Result<()> {
+pub(crate) fn teardown() -> keyring_core::Result<()> {
     keyring_core::unset_default_store();
     Ok(())
 }
 
-pub fn cleanup() -> keyring_core::Result<()> {
+fn cleanup() -> keyring_core::Result<()> {
     // make sure there's nothing left from prior runs
     // golden_path:
     let entry1 = Entry::new("my-service", "my-user")?;

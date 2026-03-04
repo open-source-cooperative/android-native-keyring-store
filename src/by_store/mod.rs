@@ -50,6 +50,8 @@ let store = Store::new().unwrap();
 See individual type documentation for more details.
  */
 mod vault;
+#[cfg(feature = "compile_tests")]
+pub use vault::clear_vault_list;
 
 pub mod store;
 pub use store::Store;
