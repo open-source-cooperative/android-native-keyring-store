@@ -1,5 +1,6 @@
 use crate::methods::{ClassDecl, FromValue, JResult, Method, NoParam, SignatureComp};
 use base64::{Engine, prelude::BASE64_STANDARD};
+use jni::objects::{AutoLocal, JMap, JString};
 use jni::{
     JNIEnv,
     objects::{GlobalRef, JObject},
@@ -75,6 +76,17 @@ impl FromValue for SharedPreferences {
 impl SharedPreferences {
     fn class() -> ClassDecl {
         ClassDecl("Landroid/content/SharedPreferences;")
+    }
+
+    pub fn get_all(&self, env: &mut JNIEnv) -> JResult<SharedPreferencesKeys> {
+        struct ThisMethod;
+        impl Method for ThisMethod {
+            type Param = NoParam;
+            type Return = SharedPreferencesKeys;
+
+            const NAME: &str = "getAll";
+        }
+        ThisMethod::call(&self.self_, env, NoParam)
     }
 
     pub fn contains(&self, env: &mut JNIEnv, key: &str) -> JResult<bool> {
@@ -179,5 +191,34 @@ impl SharedPreferencesEditor {
             const NAME: &str = "commit";
         }
         ThisMethod::call(&self.self_, env, NoParam)
+    }
+}
+
+pub struct SharedPreferencesKeys {
+    self_: GlobalRef,
+}
+impl FromValue for SharedPreferencesKeys {
+    fn signature() -> SignatureComp {
+        Self::class().into()
+    }
+    fn from_object(self_: GlobalRef, _env: &mut JNIEnv) -> JResult<Self> {
+        Ok(Self { self_ })
+    }
+}
+impl SharedPreferencesKeys {
+    fn class() -> ClassDecl {
+        ClassDecl("Ljava/util/Map;")
+    }
+
+    pub fn get_keys(&self, env: &mut JNIEnv) -> JResult<Vec<String>> {
+        let mut result = Vec::new();
+        let j_map = JMap::from_env(env, self.self_.as_obj())?;
+        let mut iterator = j_map.iter(env)?;
+        while let Some((j_key, _)) = iterator.next(env)? {
+            let j_key: AutoLocal<JString> = env.auto_local(j_key.into());
+            let key_str = env.get_string(&j_key)?;
+            result.push(key_str.into());
+        }
+        Ok(result)
     }
 }

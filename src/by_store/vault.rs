@@ -135,7 +135,7 @@ impl Vault {
     fn new(config: &StoreConfig) -> Result<Self> {
         // Vault dividers must have a non-alphabetic character so that the
         // vault's config key is guaranteed not to match any credential's key.
-        if config.divider.is_empty() || config.divider.chars().all(char::is_alphabetic) {
+        if config.divider.chars().all(char::is_alphanumeric) {
             let err = "must contain a non-alphabetic character".to_string();
             return Err(Error::Invalid("divider".to_string(), err));
         }
@@ -174,6 +174,7 @@ impl Vault {
         Ok(())
     }
 
+    /// Deletes the vault, which better not be in use!
     fn delete(&self) -> Result<()> {
         log::debug!("Deleting vault with config {:?}", self.config);
         self.with_env(|env| {
@@ -184,6 +185,17 @@ impl Vault {
             Ok(())
         })?;
         Ok(())
+    }
+
+    /// Return all the credential ids in the vault
+    pub fn get_ids(&self) -> Result<Vec<String>> {
+        let ids = self.with_env(|env| {
+            let file = self.get_file(env)?;
+            let keys = file.get_all(env)?.get_keys(env)?;
+            let ids: Vec<String> = keys.into_iter().filter(|k| k != CONFIG_KEY).collect();
+            Ok(ids)
+        })?;
+        Ok(ids)
     }
 
     #[cfg(feature = "compile_tests")]

@@ -1,8 +1,10 @@
-use super::Cred;
-use keyring_core::{Entry, Error, Result, api::CredentialStoreApi, attributes::parse_attributes};
-use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
 
+use keyring_core::{Entry, Error, Result, api::CredentialStoreApi, attributes::parse_attributes};
+use regex::{Error as RegexError, Regex};
+use serde::{Deserialize, Serialize};
+
+use super::Cred;
 use super::vault::{AtomicVault, delete, lookup};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -56,7 +58,7 @@ impl StoreConfig {
         if let Some(divider) = mods.get("divider") {
             // Vault dividers must have a non-alphabetic character so that the
             // vault's config key is guaranteed not to match any credential's key.
-            if config.divider.chars().all(char::is_alphabetic) {
+            if config.divider.chars().all(char::is_alphanumeric) {
                 let err = "must contain a non-alphabetic character".to_string();
                 return Err(Error::Invalid("divider".to_string(), err));
             }
@@ -149,8 +151,48 @@ impl CredentialStoreApi for Store {
         }
         let id = format!("{user}{divider}{service}");
         log::debug!("Building entry {id:?} for ({service:?}, {user:?})");
-        let credential = Cred::new_specifier(self.vault.clone(), id, service, user);
+        let credential = Cred::new_specifier(self.vault.clone(), &id, service, user);
         Ok(Entry::new_with_credential(Arc::new(credential)))
+    }
+
+    fn search(&self, spec: &HashMap<&str, &str>) -> Result<Vec<Entry>> {
+        let spec_err = |key: &str, e: RegexError| {
+            let msg = format!("invalid regexp: {}", e);
+            Error::Invalid(key.to_string(), msg)
+        };
+        let spec = parse_attributes(&["id", "service", "user"], Some(spec))?;
+        let id_spec = spec.get("id").cloned().unwrap_or_default();
+        let id_exp = Regex::new(&id_spec).map_err(|e| spec_err("id", e))?;
+        let service_spec = spec.get("service").cloned().unwrap_or_default();
+        let service_exp = Regex::new(&service_spec).map_err(|e| spec_err("service", e))?;
+        let user_spec = spec.get("user").cloned().unwrap_or_default();
+        let user_exp = Regex::new(&user_spec).map_err(|e| spec_err("user", e))?;
+        let vault = self
+            .vault
+            .lock()
+            .expect("Vault lock poisoned: report a bug!");
+        let mut results = Vec::new();
+        let ids = vault.get_ids()?;
+        for id in ids {
+            if !id_exp.is_match(&id) {
+                continue;
+            }
+            if let Some((user, service)) = id.split_once(&self.config.divider)
+                && !service.contains(&self.config.divider)
+            {
+                // this is a specifier
+                if !user_exp.is_match(user) || !service_exp.is_match(service) {
+                    continue;
+                }
+                let credential = Cred::new_specifier(self.vault.clone(), &id, service, user);
+                results.push(Entry::new_with_credential(Arc::new(credential)));
+            } else {
+                // this is not a specifier - someone has mucked with the vault
+                let msg = format!("Found invalid credential id {id:?}");
+                return Err(Error::BadStoreFormat(msg));
+            }
+        }
+        Ok(results)
     }
 
     fn as_any(&self) -> &dyn std::any::Any {

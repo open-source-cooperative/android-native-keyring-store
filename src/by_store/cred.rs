@@ -9,7 +9,7 @@ use super::vault::AtomicVault;
 pub struct Cred {
     vault: AtomicVault,
     pub id: String,
-    pub specifiers: Option<(String, String)>,
+    pub specifiers: (String, String),
 }
 
 impl std::fmt::Debug for Cred {
@@ -23,19 +23,11 @@ impl std::fmt::Debug for Cred {
 }
 
 impl Cred {
-    pub fn new_specifier(vault: AtomicVault, id: String, service: &str, user: &str) -> Self {
+    pub fn new_specifier(vault: AtomicVault, id: &str, service: &str, user: &str) -> Self {
         Self {
             vault,
-            id,
-            specifiers: Some((service.to_owned(), user.to_owned())),
-        }
-    }
-
-    pub fn new_wrapper(vault: AtomicVault, key: String) -> Self {
-        Self {
-            vault,
-            id: key,
-            specifiers: None,
+            id: id.to_owned(),
+            specifiers: (service.to_owned(), user.to_owned()),
         }
     }
 }
@@ -114,7 +106,7 @@ impl CredentialApi for Cred {
     }
 
     fn get_specifiers(&self) -> Option<(String, String)> {
-        self.specifiers.clone()
+        Some(self.specifiers.clone())
     }
 
     fn as_any(&self) -> &dyn std::any::Any {

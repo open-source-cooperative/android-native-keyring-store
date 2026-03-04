@@ -2,7 +2,7 @@
 authors = ["André Puel <andrepuel@gmail.com>", "Dan Brotsky <dev@brotsky.com>"]
 description = "Android CredentialStore for keyring-core"
 homepage = "https://github.com/open-source-cooperative/android-native-keyring-store"
-keywords = ["password", "credential", "keychain", "android", "keystore"]
+keywords = ["password", "secret", "credential", "android", "keystore"]
 license = "MIT OR Apache-2.0"
 name = "android-native-keyring-store"
 repository = "https://github.com/open-source-cooperative/android-native-keyring-store.git"
@@ -26,6 +26,7 @@ jni = "0.21.1"
 keyring-core = "0.7.4"
 log = "0.4.29"
 ndk-context = "0.1.1"
+regex = "1.12.3"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 thiserror = "2.0.18"
