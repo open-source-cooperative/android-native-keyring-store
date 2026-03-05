@@ -1,9 +1,10 @@
 use crate::methods::{ClassDecl, FromValue, JResult, Method, NoParam, SignatureComp};
 use base64::{Engine, prelude::BASE64_STANDARD};
-use jni::objects::{AutoLocal, JMap, JString};
+#[cfg(any(feature = "legacy", feature = "compile-tests"))]
+use jni::objects::JObject;
 use jni::{
     JNIEnv,
-    objects::{GlobalRef, JObject},
+    objects::{AutoLocal, GlobalRef, JMap, JString},
 };
 use std::marker::PhantomData;
 
@@ -15,6 +16,7 @@ pub struct Context {
 }
 
 impl Context {
+    #[cfg(any(feature = "legacy", feature = "compile-tests"))]
     pub fn new(env: &JNIEnv, obj: JObject) -> JResult<Self> {
         Ok(Self {
             self_: env.new_global_ref(obj)?,
@@ -54,6 +56,7 @@ impl Context {
         ThisMethod::call(&self.self_, env, name)
     }
 
+    #[cfg(feature = "legacy")]
     pub fn id(&self) -> usize {
         self.self_.as_raw() as usize
     }

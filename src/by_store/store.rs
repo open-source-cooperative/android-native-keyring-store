@@ -7,6 +7,10 @@ use serde::{Deserialize, Serialize};
 use super::Cred;
 use super::vault::{AtomicVault, delete, lookup};
 
+/// The configurable parts of a Store.
+///
+/// It's serializable so that it can be kept
+/// in the store's SharedPreferences file as a JSON string.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StoreConfig {
     pub name: String,
@@ -44,6 +48,7 @@ impl StoreConfig {
         Ok(())
     }
 
+    /// Create a StoreConfig from a configuration HashMap
     pub fn from_configuration(configuration: &HashMap<&str, &str>) -> Result<Self> {
         let mods = parse_attributes(&["+name", "+filename", "+divider"], Some(configuration))?;
         let mut config = StoreConfig::default();
@@ -68,6 +73,8 @@ impl StoreConfig {
     }
 }
 
+/// A Store is a wrapper around a Vault
+/// that keeps its configuration handy.
 pub struct Store {
     pub id: String,
     pub config: StoreConfig,
@@ -85,28 +92,58 @@ impl std::fmt::Debug for Store {
 }
 
 impl Store {
+    /// Returns a store with the default configuration,
+    /// creating one if necessary.
     pub fn new() -> Result<Arc<Self>> {
         let config = StoreConfig::default();
         Store::new_with_store_config(config)
     }
 
+    /// Returns a store with the specified configuration,
+    /// creating one if necessary.
+    ///
+    /// Allowed configuration keys are `name`, `filename`, and `divider`.
+    /// None are required, but any that are supplied must be non-empty.
+    ///
+    /// The value of `name` defaults to `default`. Stores names are unique, so you can't
+    /// create two stores with the same name (even if they use different configurations).
+    ///
+    /// The value of `filename` defaults to `keyring-{name}`. Store filenames are unique,
+    /// so you can't create two differently named stores with the same filename.
+    ///
+    /// The value of `divider` defaults to `\u{feff}@\u{feff}` which,
+    /// when printed as part of a string, looks like `@` because
+    /// the BOM character is considered a non-spacing word-joining
+    /// character. The divider _must_ contain a non-alphabetic character.
     pub fn new_with_configuration(configuration: &HashMap<&str, &str>) -> Result<Arc<Self>> {
         let config = StoreConfig::from_configuration(configuration)?;
         Store::new_with_store_config(config)
     }
 
+    /// Returns a store with the specified [StoreConfig],
+    /// creating one if necessary.
     pub fn new_with_store_config(config: StoreConfig) -> Result<Arc<Self>> {
         let vault = lookup(&config)?;
         let id = generate_instance_id();
         Ok(Arc::new(Store { id, config, vault }))
     }
 
+    /// Attempts to delete the store with the specified configuration.
+    ///
+    /// Physically deletes the underlying vault file and key, which
+    /// in turn deletes all the contained credential information.
+    ///
+    /// Once a store is deleted, it cannot be recovered.
+    ///
+    /// Vaults can't be deleted by a process that has previously
+    /// used them to back a store. This would leave any existing
+    /// credentials with no vault to back them.
     pub fn delete(configuration: &HashMap<&str, &str>) -> Result<bool> {
         let config = StoreConfig::from_configuration(configuration)?;
         delete(&config)
     }
 
-    #[cfg(feature = "compile_tests")]
+    #[cfg(feature = "compile-tests")]
     pub fn change_key(&self) -> Result<()> {
         let vault = self
             .vault
@@ -125,6 +162,13 @@ impl CredentialStoreApi for Store {
         self.id.clone()
     }
 
+    /// See the API documentation for [CredentialStoreApi::build].
+    ///
+    /// No modifiers are allowed.
+    ///
+    /// The matching credential is identified by the string `{user}{divider}{service}`.
+    /// The user and service values are not allowed to
+    /// contain the divider string, so entries are never ambiguous.
     fn build(
         &self,
         service: &str,
@@ -155,6 +199,26 @@ impl CredentialStoreApi for Store {
         Ok(Entry::new_with_credential(Arc::new(credential)))
     }
 
+    /// See the API documentation for [CredentialStoreApi::search].
+    ///
+    /// Allowed specifiers are `id`, `service`, and `user`, and their
+    /// values must be valid regular expressions. The `user` and `service`
+    /// expressions are matched against the user and service parts,
+    /// respectively, of each credential's identifier. The `id` expression
+    /// is matched against the entire credential identifier.
+    ///
+    /// The match used is a match-anywhere, case-sensitive, Unicode-aware match.
+    /// Expressions must be in the syntax of the `regex` crate, documented
+    /// [here](https://docs.rs/regex/latest/regex/#syntax), and can use sub-expressions to
+    /// modify the case-sensitiviy or anchors to force a match of the entire string.
+    ///
+    /// If third parties have introduced entries into the store's
+    /// SharedPreferences file that don't conform to credential ID
+    /// conventions, they are ignored, as is the special entry
+    /// used to hold the store's configuration.
+    ///
+    /// The wrappers returned by searches are all specifiers, so they
+    /// can be queried for their user and service values.
     fn search(&self, spec: &HashMap<&str, &str>) -> Result<Vec<Entry>> {
         let spec_err = |key: &str, e: RegexError| {
             let msg = format!("invalid regexp: {}", e);
@@ -172,24 +236,11 @@ impl CredentialStoreApi for Store {
             .lock()
             .expect("Vault lock poisoned: report a bug!");
         let mut results = Vec::new();
-        let ids = vault.get_ids()?;
-        for id in ids {
-            if !id_exp.is_match(&id) {
-                continue;
-            }
-            if let Some((user, service)) = id.split_once(&self.config.divider)
-                && !service.contains(&self.config.divider)
-            {
-                // this is a specifier
-                if !user_exp.is_match(user) || !service_exp.is_match(service) {
-                    continue;
-                }
-                let credential = Cred::new_specifier(self.vault.clone(), &id, service, user);
+        let triples = vault.get_ids(&id_exp)?;
+        for (id, service, user) in triples.iter() {
+            if user_exp.is_match(user) && service_exp.is_match(service) {
+                let credential = Cred::new_specifier(self.vault.clone(), id, service, user);
                 results.push(Entry::new_with_credential(Arc::new(credential)));
-            } else {
-                // this is not a specifier - someone has mucked with the vault
-                let msg = format!("Found invalid credential id {id:?}");
-                return Err(Error::BadStoreFormat(msg));
             }
         }
         Ok(results)

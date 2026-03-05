@@ -1,12 +1,12 @@
-# Android Credential Store
+# Keyring-compatible Android Store
 
-This crate provides management of Keyring credentials in Android's native `KeyStore` and `SharedPreferences` stores. Once this library has been loaded and initialized (as described below) by your application, other Rust code in your application can use this credential store.
+This crate provides storage and management of Keyring credentials in Android's native `SharedPreferences` store, securing all passwords and secrets using encryption via credentials in Android’s native Keystore. Once this library has been loaded and initialized (as described below) by your Android-native application, other Rust code linked into your application can use this credential store.
 
 ## Usage
 
-As usual for Keyring credential stores, you create a credential store by invoking `Store::new` (or `Store::new_with_configuration`). But in order for this to work, your application must first have initialized the `application_context` object provided by the [ndk-context crate](https://crates.io/crates/ndk-context) and also loaded this library.
+As usual for Keyring credential stores, you create a credential store by invoking `Store::new` (or `Store::new_with_configuration`). In order for this to work, however, your application must first have initialized the `application_context` object provided by the [ndk-context crate](https://crates.io/crates/ndk-context) and also loaded this library.
 
-A number of Android/Rust application frameworks, such as Dioxus Mobile, Tauri Mobile and the [android-activity crate](https://crates.io/crates/android-activity), already provide this initialization for you. If your framework does not, then this crate also provides an initialization function that you can invoke at your application's startup. To do this, you add a Java/Kotlin class `io.crates.keyring.Keyring` to your main application with the following content:
+A number of Android/Rust application frameworks, such as Dioxus Mobile, Tauri Mobile and the [android-activity crate](https://crates.io/crates/android-activity), already provide this initialization for you. If your framework does not, then this crate also provides an initialization function that you can invoke at your application's startup. To do this, you add a Kotlin class `io.crates.keyring.Keyring` to your main application with the following content:
 
 ```kotlin
 package io.crates.keyring;
@@ -19,22 +19,25 @@ class Keyring {
           	// see Note 1, below
             System.loadLibrary("android_native_keyring_store")
         }
-
         external fun initializeNdkContext(context: Context);
     }
 }
 ```
 
-Then, from your main activity, you have your app load the library and initialize the ndk-context:
+Then, from your main activity’s `onCreate` method, you have your app load the library and initialize the ndk-context:
 
 ```kotlin
     class MainActivity : ComponentActivity() {
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        Keyring.initializeNdkContext(this.applicationContext);
+      ...
+      override fun onCreate(savedInstanceState: Bundle?) {
+          super.onCreate(savedInstanceState)
+          Keyring.initializeNdkContext(this.applicationContext);
+          ...
+      }
+    	...
 ```
 
-Note 1: This code expects that a library file `libandroid_native_keyring_store.so` was compiled with the contents of this package and attached to your application. See the next section for details on how to do that. It’s possible that your application framework may already provide a way to attach and pre-load external libraries. If so, you won’t need the `init` section above that loads the library.
+Note 1: This code expects that a library file `libandroid_native_keyring_store.so` was compiled from this crate and attached to your application. See the next section for details on how to do that. It’s possible that your application framework may already provide a way to attach and pre-load external libraries. If so, you won’t need the `init` section above that loads the library.
 
 ## Building for Android
 
@@ -52,7 +55,7 @@ Because the Android/Rust ecosystem is still relatively new, there is a lot of co
    cargo build --target aarch64-linux-android --release
    ```
 
-   There is a lot of consistent documentation on the web about which Android targets correspond to which cargo targets, so I won’t give more examples here.
+   There is a lot of consistent documentation on the web about which Android targets correspond to which cargo targets, so we won’t give more examples here.
 
 5. Note that step (4) is likely to be a cross-compilation, because your dev machine is probably not an Android machine. This means that you will need both the appropriate rust standard libraries for that target and a linker for that target to be available:
 
@@ -81,6 +84,22 @@ Because the Android/Rust ecosystem is still relatively new, there is a lot of co
    ```
 
    (Note that this symlink is to the release build of the library, which is probably the one you want to use in your application.)
+
+## Sample Applications
+
+There are two sample applications available that run on Android and use this crate.
+
+The first is the `Keyring Tester` application that is built according to the instructions here and whose source is available in the [`keyring-tester` folder](https://github.com/open-source-cooperative/android-native-keyring-store/tree/main/keyring-tester) of this crate’s [source repository](https://github.com/open-source-cooperative/android-native-keyring-store).
+
+The second is the `Keyring Demo` [Tauri 2.0](https://v2.tauri.app) application whose source is available in the [Keyring Demo repository](https://github.com/open-source-cooperative/keyring-demo). This app is currently in closed pre-release on the Google Play Store, and is actively looking for beta testers; send an email to `keyring-demo` at `brotsky.com` if you would like to try it.
+
+## Upgrading from v0.5.x or earlier
+
+Starting with release v0.6.0 of this crate, the storage conventions for credentials have changed. If your application has stored credentials using an earlier version of this crate, you can still access those credentials by using the function `LegacyStore::from_ndk_context`  to create your credential store (rather then `Store::new` as you did before).
+
+However! In order to get access to the `LegacyStore` implementation, you will need to compile this crate with the `legacy` feature enabled, and you are strongly encouraged not to keep using the legacy implementation as it is deprecated and may be removed in future versions. Instead, your application should use the default store based on the current implementation (or create a named store of its own to use), and it should migrate any needed credentials from the legacy store to the current one.
+
+See the crate docs for more about this.
 
 ## Changelog
 

@@ -3,9 +3,9 @@ use std::sync::{Arc, Mutex};
 use jni::{JNIEnv, JavaVM};
 use keyring_core::{Credential, api::CredentialApi};
 
-use crate::crypto::{decrypt, encrypt};
 use crate::{
-    error::{AndroidKeyringResult, HasJavaVm},
+    crypto::{decrypt, encrypt},
+    error::AndroidKeyringResult,
     keystore::{
         BLOCK_MODE_GCM, ENCRYPTION_PADDING_NONE, KEY_ALGORITHM_AES, Key,
         KeyGenParameterSpecBuilder, KeyGenerator, KeyStore, PROVIDER, PURPOSE_DECRYPT,
@@ -13,6 +13,8 @@ use crate::{
     },
     shared_preferences::{Context, MODE_PRIVATE, SharedPreferences},
 };
+
+use super::HasJavaVm;
 
 pub struct Cred {
     java_vm: Arc<JavaVM>,

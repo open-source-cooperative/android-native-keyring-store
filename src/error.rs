@@ -1,5 +1,3 @@
-use jni::{JNIEnv, JavaVM};
-
 #[derive(thiserror::Error, Debug)]
 pub enum AndroidKeyringError {
     #[error(transparent)]
@@ -41,27 +39,4 @@ pub enum CorruptedData {
     DataTooSmall(usize),
     #[error("Verification of data signature/MAC failed")]
     DecryptionFailure,
-}
-
-pub trait HasJavaVm {
-    fn java_vm(&self) -> &JavaVM;
-
-    fn check_for_exception<T, F>(&self, f: F) -> AndroidKeyringResult<T>
-    where
-        F: FnOnce(&mut JNIEnv) -> AndroidKeyringResult<T>,
-    {
-        let vm = self.java_vm();
-        let mut env = vm.attach_current_thread()?;
-        let t_result = f(&mut env);
-        if env.exception_check()? {
-            env.exception_describe()?;
-            env.exception_clear()?;
-
-            if t_result.is_ok() {
-                return Err(AndroidKeyringError::JavaExceptionThrow);
-            }
-        }
-
-        t_result
-    }
 }

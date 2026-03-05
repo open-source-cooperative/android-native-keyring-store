@@ -3,12 +3,9 @@ use std::{collections::HashMap, sync::Arc};
 use jni::JavaVM;
 use keyring_core::{Entry, api::CredentialStoreApi};
 
-use crate::{
-    error::{AndroidKeyringResult, HasJavaVm},
-    shared_preferences::Context,
-};
+use crate::{error::AndroidKeyringResult, shared_preferences::Context};
 
-use super::Cred;
+use super::{Cred, HasJavaVm};
 
 pub struct Store {
     java_vm: Arc<JavaVM>,
@@ -27,7 +24,7 @@ impl std::fmt::Debug for Store {
 }
 
 impl Store {
-    /// Initializes AndroidBuilder using the JNI context available
+    /// Initializes the store using the AndroidContext available
     /// on the `ndk-context` crate.
     pub fn from_ndk_context() -> AndroidKeyringResult<Arc<Self>> {
         let ctx = ndk_context::android_context();

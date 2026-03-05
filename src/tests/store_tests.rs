@@ -211,9 +211,19 @@ fn search() -> keyring_core::Result<()> {
     if user_only.len() != 1 {
         return bad_result("user-only", &format!("1, got {}", user_only.len()));
     }
+    let service = user_only[0].get_specifiers().unwrap().0;
+    if service != "search-service-as-well" {
+        let msg = format!("search-service-as-well, got {}", service);
+        return bad_result("user-only service", &msg);
+    }
     let service_only = Entry::search(&HashMap::from([("service", "only")]))?;
     if service_only.len() != 1 {
         return bad_result("service-only", &format!("1, got {}", service_only.len()));
+    }
+    let user = service_only[0].get_specifiers().unwrap().1;
+    if user != "search-user-as-well" {
+        let msg = format!("search-user-as-well, got {}", user);
+        return bad_result("service-only user", &msg);
     }
     let both = Entry::search(&HashMap::from([("id", "only")]))?;
     if both.len() != 2 {

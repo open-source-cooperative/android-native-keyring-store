@@ -2,6 +2,7 @@ use std::sync::{Arc, Mutex};
 
 use jni::{JNIEnv, JavaVM, objects::GlobalRef};
 use keyring_core::{Error, Result};
+use regex::Regex;
 
 use crate::{
     error::AndroidKeyringResult,
@@ -88,7 +89,7 @@ pub fn delete(config: &StoreConfig) -> Result<bool> {
     Ok(false)
 }
 
-#[cfg(feature = "compile_tests")]
+#[cfg(feature = "compile-tests")]
 pub fn clear_vault_list() {
     VAULTS
         .lock()
@@ -195,18 +196,27 @@ impl Vault {
         Ok(())
     }
 
-    /// Return all the credential ids in the vault
-    pub fn get_ids(&self) -> Result<Vec<String>> {
-        let ids = self.with_env(|env| {
+    /// Find all credentials whose ids match a given regular expression, returning
+    /// the triple (id, service, user) for each matching credential.
+    pub fn get_ids(&self, re: &Regex) -> Result<Vec<(String, String, String)>> {
+        let mut ids = Vec::new();
+        self.with_env(|env| {
             let file = self.get_file(env)?;
             let keys = file.get_all(env)?.get_keys(env)?;
-            let ids: Vec<String> = keys.into_iter().filter(|k| k != CONFIG_KEY).collect();
-            Ok(ids)
+            for key in keys {
+                if let Some((user, service)) = key.split_once(&self.config.divider)
+                    && !service.contains(&self.config.divider)
+                    && re.is_match(&key)
+                {
+                    ids.push((key.clone(), service.to_string(), user.to_string()));
+                }
+            }
+            Ok(())
         })?;
         Ok(ids)
     }
 
-    #[cfg(feature = "compile_tests")]
+    #[cfg(feature = "compile-tests")]
     pub fn change_key(&self) -> Result<()> {
         self.with_env(|env| {
             self.delete_key(env)?;

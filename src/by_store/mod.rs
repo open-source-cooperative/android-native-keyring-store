@@ -1,5 +1,5 @@
 /*!
-# By-Store Credential Module
+# Named Credential Stores
 
 This module implements independent, named keyring credential stores. Each credential store
 uses a SharedPreferences file for storage, encrypting the secret data stored in that file
@@ -13,6 +13,11 @@ for that store's Keystore entry) are derived from the store name by prefixing it
 `keyring-`. Clients can override this by specifying the filename directly with the
 `filename` configuration key.
 
+Stores names are unique, so you can't create two stores with the same name
+(even if they use different configurations). Attempting to create the second
+one will fail. Similarly, store filenames are unique, so you can't create
+two differently named stores with the same filename.
+
 Inside the store's SharedPreferences file, an entry's credential is identified by the
 concatenation of the entry's user and service names with a store-specific divider string.
 Clients can specify the divider string---which must contain at least one
@@ -23,6 +28,10 @@ The store's name, filename, and divider string are kept in the store in a
 SharedPreferences entry named by the key `vaultConfig`. Since dividers must contain non-alphanumeric
 characters, and every credential's key contains the divider, there is no way the `vaultConfig`
 entry can be confused with an entry's credential key.
+
+Accessing a store's SharedPreference file directly is not recommended. To avoid
+interactions with third-party software that might do so, store operations are careful to
+ignore entries that don't look like they are credential IDs.
 
 ## Ambiguity
 
@@ -41,16 +50,13 @@ The search matches anywhere in the respective strings, so use string
 start and end anchors to match the entire string. A search with
 no specification will return all the credentials in the store.
 
-## Usage
-To use the `default` store:
-```rust
-let store = Store::new().unwrap();
-```
-
-See individual type documentation for more details.
+Searches do not return entries in the SharedPreferences file
+that don't conform to the credential naming conventions. These can
+only have been added by third parties, so they are assumed
+not to be valid credentials.
  */
 mod vault;
-#[cfg(feature = "compile_tests")]
+#[cfg(feature = "compile-tests")]
 pub use vault::clear_vault_list;
 
 pub mod store;

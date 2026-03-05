@@ -7,6 +7,7 @@ use keyring_core::Result;
 use crate::{by_store::clear_vault_list, shared_preferences::Context};
 
 mod crypto_tests;
+#[cfg(feature = "legacy")]
 pub mod legacy_tests;
 pub mod store_tests;
 
@@ -25,11 +26,18 @@ pub extern "system" fn Java_io_crates_keyring_KeyringTests_00024Companion_runAll
     context: JObject,
 ) {
     let context = Context::new(&env, context).unwrap();
+    #[cfg(feature = "legacy")]
     let (ls, lf) = legacy_tests::run_tests();
     let (ss, sf) = store_tests::run_tests();
     let (cs, cf) = crypto_tests::run_tests(env, context);
+    #[cfg(feature = "legacy")]
     let successes = ls + ss + cs;
+    #[cfg(not(feature = "legacy"))]
+    let successes = ss + cs;
+    #[cfg(feature = "legacy")]
     let failures = lf + sf + cf;
+    #[cfg(not(feature = "legacy"))]
+    let failures = sf + cf;
     let msg = CString::new(format!(
         "Overall: {} successes, {} failures",
         successes, failures
@@ -54,7 +62,9 @@ pub extern "system" fn Java_io_crates_keyring_KeyringTests_00024Companion_runAll
 }
 
 pub fn cleanup() -> Result<()> {
+    #[cfg(feature = "legacy")]
     legacy_tests::setup()?;
+    #[cfg(feature = "legacy")]
     legacy_tests::teardown()?;
     clear_vault_list();
     store_tests::cleanup()?;

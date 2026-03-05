@@ -6,6 +6,14 @@ use crate::crypto::{decrypt, encrypt};
 
 use super::vault::AtomicVault;
 
+/// The Cred struct is public, so you can read the cred's ID and specifiers.
+///
+/// Every Cred also points back to its vault, which is needed for its operation,
+/// but that is not a public member since vaults aren't public.
+///
+/// Every Cred operation works by locking its containing vault and then asking
+/// the vault to perform the operation. This means that all credential operations
+/// are serialized and never interfere with one another.
 pub struct Cred {
     vault: AtomicVault,
     pub id: String,
@@ -23,6 +31,10 @@ impl std::fmt::Debug for Cred {
 }
 
 impl Cred {
+    /// Create a new credential object in the given vault with the given ID for the given
+    /// service and user.
+    ///
+    /// No validity checking is done, that's assumed to be done by the caller.
     pub fn new_specifier(vault: AtomicVault, id: &str, service: &str, user: &str) -> Self {
         Self {
             vault,
