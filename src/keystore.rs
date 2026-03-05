@@ -1,16 +1,26 @@
-use crate::methods::{
-    ClassDecl, Constructible, FromValue, JResult, Method, NoParam, SignatureComp, StaticMethod,
-    ToValue,
-};
+use std::marker::PhantomData;
+
 use jni::{
     JNIEnv,
     objects::{GlobalRef, JObject, JValueGen},
 };
-use std::marker::PhantomData;
+
+use crate::methods::{
+    ClassDecl, Constructible, FromValue, JResult, Method, NoParam, SignatureComp, StaticMethod,
+    ToValue,
+};
+
+pub const BLOCK_MODE_GCM: &str = "GCM";
+pub const ENCRYPTION_PADDING_NONE: &str = "NoPadding";
+pub const KEY_ALGORITHM_AES: &str = "AES";
+pub const PROVIDER: &str = "AndroidKeyStore";
+pub const PURPOSE_ENCRYPT: i32 = 1;
+pub const PURPOSE_DECRYPT: i32 = 2;
 
 pub struct KeyStore {
     self_: GlobalRef,
 }
+
 impl FromValue for KeyStore {
     fn signature() -> SignatureComp {
         Self::class().into()
@@ -20,6 +30,7 @@ impl FromValue for KeyStore {
         Ok(Self { self_ })
     }
 }
+
 impl KeyStore {
     fn class() -> ClassDecl {
         ClassDecl("Ljava/security/KeyStore;")
@@ -44,10 +55,7 @@ impl KeyStore {
                 ClassDecl("Ljava/security/KeyStore$LoadStoreParameter;").into()
             }
 
-            fn to_value<'a>(
-                &self,
-                _env: &mut JNIEnv<'a>,
-            ) -> JResult<JValueGen<JObject<'a>>> {
+            fn to_value<'a>(&self, _env: &mut JNIEnv<'a>) -> JResult<JValueGen<JObject<'a>>> {
                 Ok(JObject::null().into())
             }
         }
@@ -86,12 +94,25 @@ impl KeyStore {
 
         ThisMethod::call(&self.self_, env, (alias, None))
     }
+
+    pub fn delete_entry(&self, env: &mut JNIEnv<'_>, alias: &str) -> JResult<()> {
+        struct ThisMethod<'a>(PhantomData<&'a ()>);
+        impl<'a> Method for ThisMethod<'a> {
+            type Param = &'a str;
+            type Return = ();
+
+            const NAME: &'static str = "deleteEntry";
+        }
+
+        ThisMethod::call(&self.self_, env, alias)
+    }
 }
 
 #[derive(Debug)]
 pub struct Key {
     self_: GlobalRef,
 }
+
 impl FromValue for Key {
     fn signature() -> SignatureComp {
         Self::class().into()
@@ -101,6 +122,7 @@ impl FromValue for Key {
         Ok(Self { self_ })
     }
 }
+
 impl ToValue for Key {
     fn signature() -> SignatureComp {
         Self::class().into()
@@ -110,6 +132,7 @@ impl ToValue for Key {
         Ok(env.new_local_ref(&self.self_)?.into())
     }
 }
+
 impl Key {
     fn class() -> ClassDecl {
         ClassDecl("Ljava/security/Key;")
@@ -119,6 +142,7 @@ impl Key {
 pub struct SecretKey {
     self_: GlobalRef,
 }
+
 impl FromValue for SecretKey {
     fn signature() -> SignatureComp {
         Self::class().into()
@@ -128,11 +152,13 @@ impl FromValue for SecretKey {
         Ok(Self { self_ })
     }
 }
+
 impl SecretKey {
     fn class() -> ClassDecl {
         ClassDecl("Ljavax/crypto/SecretKey;")
     }
 }
+
 impl From<SecretKey> for Key {
     fn from(value: SecretKey) -> Self {
         Key { self_: value.self_ }
@@ -142,6 +168,7 @@ impl From<SecretKey> for Key {
 pub struct KeyGenerator {
     self_: GlobalRef,
 }
+
 impl FromValue for KeyGenerator {
     fn signature() -> SignatureComp {
         Self::class().into()
@@ -151,6 +178,7 @@ impl FromValue for KeyGenerator {
         Ok(Self { self_ })
     }
 }
+
 impl KeyGenerator {
     fn class() -> ClassDecl {
         ClassDecl("Ljavax/crypto/KeyGenerator;")
@@ -196,6 +224,7 @@ impl KeyGenerator {
 pub struct KeyGenParameterSpecBuilder {
     self_: GlobalRef,
 }
+
 impl FromValue for KeyGenParameterSpecBuilder {
     fn signature() -> SignatureComp {
         Self::class().into()
@@ -205,11 +234,13 @@ impl FromValue for KeyGenParameterSpecBuilder {
         Ok(Self { self_ })
     }
 }
+
 impl KeyGenParameterSpecBuilder {
     fn class() -> ClassDecl {
         ClassDecl("Landroid/security/keystore/KeyGenParameterSpec$Builder;")
     }
 }
+
 impl KeyGenParameterSpecBuilder {
     pub fn new(env: &mut JNIEnv, alias: &str, purpose: i32) -> JResult<Self> {
         struct ThisMethod<'a>(PhantomData<&'a ()>);
@@ -285,6 +316,7 @@ impl KeyGenParameterSpecBuilder {
 pub struct KeyGenParameterSpec {
     self_: GlobalRef,
 }
+
 impl FromValue for KeyGenParameterSpec {
     fn signature() -> SignatureComp {
         Self::class().into()
@@ -294,6 +326,7 @@ impl FromValue for KeyGenParameterSpec {
         Ok(Self { self_ })
     }
 }
+
 impl KeyGenParameterSpec {
     fn class() -> ClassDecl {
         ClassDecl("Landroid/security/keystore/KeyGenParameterSpec;")
@@ -303,11 +336,13 @@ impl KeyGenParameterSpec {
 pub struct AlgorithmParameterSpec {
     self_: GlobalRef,
 }
+
 impl From<KeyGenParameterSpec> for AlgorithmParameterSpec {
     fn from(value: KeyGenParameterSpec) -> Self {
         Self { self_: value.self_ }
     }
 }
+
 impl ToValue for AlgorithmParameterSpec {
     fn signature() -> SignatureComp {
         Self::class().into()
@@ -317,6 +352,7 @@ impl ToValue for AlgorithmParameterSpec {
         Ok(env.new_local_ref(&self.self_)?.into())
     }
 }
+
 impl AlgorithmParameterSpec {
     fn class() -> ClassDecl {
         ClassDecl("Ljava/security/spec/AlgorithmParameterSpec;")

@@ -1,20 +1,30 @@
 use crate::methods::{ClassDecl, FromValue, JResult, Method, NoParam, SignatureComp};
 use base64::{Engine, prelude::BASE64_STANDARD};
+#[cfg(any(feature = "legacy", feature = "compile-tests"))]
+use jni::objects::JObject;
 use jni::{
     JNIEnv,
-    objects::{GlobalRef, JObject},
+    objects::{AutoLocal, GlobalRef, JMap, JString},
 };
 use std::marker::PhantomData;
+
+pub const MODE_PRIVATE: i32 = 0;
 
 #[derive(Clone)]
 pub struct Context {
     self_: GlobalRef,
 }
+
 impl Context {
+    #[cfg(any(feature = "legacy", feature = "compile-tests"))]
     pub fn new(env: &JNIEnv, obj: JObject) -> JResult<Self> {
         Ok(Self {
             self_: env.new_global_ref(obj)?,
         })
+    }
+
+    pub fn from_raw(self_: GlobalRef) -> Self {
+        Self { self_ }
     }
 
     pub fn get_shared_preferences(
@@ -34,6 +44,19 @@ impl Context {
         ThisMethod::call(&self.self_, env, (name, mode))
     }
 
+    pub fn delete_shared_preferences(&self, env: &mut JNIEnv, name: &str) -> JResult<bool> {
+        struct ThisMethod<'a>(PhantomData<&'a ()>);
+        impl<'a> Method for ThisMethod<'a> {
+            type Param = &'a str;
+            type Return = bool;
+
+            const NAME: &'static str = "deleteSharedPreferences";
+        }
+
+        ThisMethod::call(&self.self_, env, name)
+    }
+
+    #[cfg(feature = "legacy")]
     pub fn id(&self) -> usize {
         self.self_.as_raw() as usize
     }
@@ -42,6 +65,7 @@ impl Context {
 pub struct SharedPreferences {
     self_: GlobalRef,
 }
+
 impl FromValue for SharedPreferences {
     fn signature() -> SignatureComp {
         Self::class().into()
@@ -51,9 +75,32 @@ impl FromValue for SharedPreferences {
         Ok(Self { self_ })
     }
 }
+
 impl SharedPreferences {
     fn class() -> ClassDecl {
         ClassDecl("Landroid/content/SharedPreferences;")
+    }
+
+    pub fn get_all(&self, env: &mut JNIEnv) -> JResult<SharedPreferencesKeys> {
+        struct ThisMethod;
+        impl Method for ThisMethod {
+            type Param = NoParam;
+            type Return = SharedPreferencesKeys;
+
+            const NAME: &str = "getAll";
+        }
+        ThisMethod::call(&self.self_, env, NoParam)
+    }
+
+    pub fn contains(&self, env: &mut JNIEnv, key: &str) -> JResult<bool> {
+        struct ThisMethod<'a>(PhantomData<&'a ()>);
+        impl<'a> Method for ThisMethod<'a> {
+            type Param = &'a str;
+            type Return = bool;
+
+            const NAME: &'static str = "contains";
+        }
+        ThisMethod::call(&self.self_, env, key)
     }
 
     pub fn get_string(&self, env: &mut JNIEnv, key: &str) -> JResult<Option<String>> {
@@ -147,5 +194,34 @@ impl SharedPreferencesEditor {
             const NAME: &str = "commit";
         }
         ThisMethod::call(&self.self_, env, NoParam)
+    }
+}
+
+pub struct SharedPreferencesKeys {
+    self_: GlobalRef,
+}
+impl FromValue for SharedPreferencesKeys {
+    fn signature() -> SignatureComp {
+        Self::class().into()
+    }
+    fn from_object(self_: GlobalRef, _env: &mut JNIEnv) -> JResult<Self> {
+        Ok(Self { self_ })
+    }
+}
+impl SharedPreferencesKeys {
+    fn class() -> ClassDecl {
+        ClassDecl("Ljava/util/Map;")
+    }
+
+    pub fn get_keys(&self, env: &mut JNIEnv) -> JResult<Vec<String>> {
+        let mut result = Vec::new();
+        let j_map = JMap::from_env(env, self.self_.as_obj())?;
+        let mut iterator = j_map.iter(env)?;
+        while let Some((j_key, _)) = iterator.next(env)? {
+            let j_key: AutoLocal<JString> = env.auto_local(j_key.into());
+            let key_str = env.get_string(&j_key)?;
+            result.push(key_str.into());
+        }
+        Ok(result)
     }
 }

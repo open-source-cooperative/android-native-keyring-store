@@ -6,6 +6,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import io.crates.keyring.Keyring
+import io.crates.keyring.KeyringLog
 import io.crates.keyring.KeyringTests
 
 class MainActivity : AppCompatActivity() {
@@ -19,7 +20,8 @@ class MainActivity : AppCompatActivity() {
             v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
             insets
         }
-        KeyringTests.runTests(applicationContext)
+        KeyringLog.setLog("android_native_keyring_store=trace")
+        KeyringTests.runAllTests(applicationContext)
         setContentView(R.layout.finish_tests)
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main)) { v, insets ->
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
