@@ -10,6 +10,7 @@ mod crypto_tests;
 #[cfg(feature = "legacy")]
 pub mod legacy_tests;
 pub mod store_tests;
+mod unlock_tests;
 
 // package io.crates.keyring
 // import android.content.Context
@@ -81,6 +82,14 @@ pub fn report(priority: LogPriority, message: &str) {
     crate::logcat::write(priority, c"unit-test", &message);
 }
 
+/// The failure of `op`, which should have returned `msg`.
+pub fn bad_result(op: &str, msg: &str) -> Result<()> {
+    Err(keyring_core::Error::Invalid(
+        op.to_string(),
+        format!("should have returned {msg}"),
+    ))
+}
+
 pub fn cleanup() -> Result<()> {
     #[cfg(feature = "legacy")]
     legacy_tests::setup()?;
@@ -89,5 +98,6 @@ pub fn cleanup() -> Result<()> {
     clear_vault_list();
     store_tests::cleanup()?;
     crypto_tests::cleanup()?;
+    unlock_tests::cleanup()?;
     Ok(())
 }

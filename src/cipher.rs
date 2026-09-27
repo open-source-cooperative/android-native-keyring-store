@@ -28,6 +28,10 @@ impl Cipher {
         ClassDecl("Ljavax/crypto/Cipher;")
     }
 
+    pub fn object(&self) -> &GlobalRef {
+        &self.self_
+    }
+
     pub fn get_instance(env: &mut JNIEnv, transformation: &str) -> JResult<Self> {
         struct ThisMethod<'a>(PhantomData<&'a ()>);
         impl<'a> StaticMethod for ThisMethod<'a> {
