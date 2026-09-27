@@ -6,6 +6,8 @@ use jni::{JNIEnv, JavaVM};
 
 use keyring_core::{Entry, get_default_store};
 
+use super::bad_result;
+
 use crate::{
     error::CorruptedData,
     shared_preferences::{Context, MODE_PRIVATE},
@@ -64,13 +66,6 @@ pub fn run_tests(env: JNIEnv, context: Context) -> (usize, usize) {
         &format!("Crypto: {} successes, {} failures", successes, failures),
     );
     (successes, failures)
-}
-
-fn bad_result(op: &str, msg: &str) -> keyring_core::Result<()> {
-    Err(keyring_core::Error::Invalid(
-        op.to_string(),
-        format!("should have returned {msg}"),
-    ))
 }
 
 const STORE_CONFIG: [(&str, &str); 3] = [

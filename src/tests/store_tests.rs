@@ -5,6 +5,8 @@ use android_log_sys::LogPriority;
 
 use keyring_core::{Entry, api::CredentialStoreApi};
 
+use super::bad_result;
+
 pub fn run_tests() -> (usize, usize) {
     let testing = [
         ("setup", setup as fn() -> keyring_core::Result<()>),
@@ -56,13 +58,6 @@ pub fn run_tests() -> (usize, usize) {
         &format!("Store: {} successes, {} failures", successes, failures),
     );
     (successes, failures)
-}
-
-fn bad_result(op: &str, msg: &str) -> keyring_core::Result<()> {
-    Err(keyring_core::Error::Invalid(
-        op.to_string(),
-        format!("should have returned {msg}"),
-    ))
 }
 
 const STORE_CONFIG: [(&str, &str); 2] = [("name", "test"), ("divider", "@")];

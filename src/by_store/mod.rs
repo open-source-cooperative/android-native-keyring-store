@@ -61,6 +61,10 @@ With `user-auth-required` set to `true`, a store opens for `user-auth-timeout` s
 user authenticates with a strong biometric or the device credential, and otherwise fails with
 [NoStorageAccess](keyring_core::Error::NoStorageAccess). It needs a non-default `name`,
 Android 11 and a secure lock screen, whose removal destroys its key.
+
+A `user-auth-timeout` of `0` keeps the store locked until the app passes [Store::finish_unlock]
+the cipher from [Store::begin_unlock] once the user approves it in a `BiometricPrompt`, and
+again after [Store::lock]. While locked, only reading and writing secrets fail.
  */
 mod vault;
 #[cfg(feature = "compile-tests")]

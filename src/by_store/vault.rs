@@ -1,15 +1,20 @@
 use std::sync::{Arc, Mutex};
 
-use jni::{JNIEnv, JavaVM, objects::GlobalRef};
+use jni::{
+    JNIEnv, JavaVM,
+    objects::{GlobalRef, JObject},
+};
 use keyring_core::{Error, Result};
 use regex::Regex;
 
 use crate::{
+    cipher::Cipher,
+    crypto::{decryption_cipher, encryption_cipher, seal, unseal},
     error::{AndroidKeyringError, AndroidKeyringResult},
     keystore::{
         AUTH_BIOMETRIC_STRONG, AUTH_DEVICE_CREDENTIAL, BLOCK_MODE_GCM, ENCRYPTION_PADDING_NONE,
         KEY_ALGORITHM_AES, Key, KeyGenParameterSpecBuilder, KeyGenerator, KeyStore, PROVIDER,
-        PURPOSE_DECRYPT, PURPOSE_ENCRYPT,
+        PURPOSE_DECRYPT, PURPOSE_ENCRYPT, SecretKeySpec,
     },
     methods::ClassDecl,
     shared_preferences::{Context, MODE_PRIVATE, SharedPreferences},
@@ -101,11 +106,24 @@ pub fn clear_vault_list() {
 
 /// A Vault holds credentials securely in a single SharedPreferences file.
 ///
-/// There is an associated key in the Android Keystore that encrypts credential secrets.
+/// There is an associated key in the Android Keystore that encrypts credential secrets,
+/// or, when that key needs an approval per use, wraps a data key that encrypts them.
 pub struct Vault {
     vm: Arc<JavaVM>,
     context: GlobalRef,
     config: StoreConfig,
+    unlock: Unlock,
+}
+
+/// How far a vault whose key needs an approval per use is unlocked.
+enum Unlock {
+    Locked,
+    /// `cipher` unwraps `sealed` once approved, or wraps a new data key when that's `None`.
+    Pending {
+        cipher: Cipher,
+        sealed: Option<Vec<u8>>,
+    },
+    Unlocked(Key),
 }
 
 impl std::fmt::Debug for Vault {
@@ -119,6 +137,10 @@ impl std::fmt::Debug for Vault {
 const CONFIG_KEY: &str = "vaultConfig";
 const USER_NOT_AUTHENTICATED: ClassDecl =
     ClassDecl("Landroid/security/keystore/UserNotAuthenticatedException;");
+const AEAD_BAD_TAG: ClassDecl = ClassDecl("Ljavax/crypto/AEADBadTagException;");
+// Alphabetic like CONFIG_KEY, so it never matches a credential's key.
+const DATA_KEY_KEY: &str = "vaultDataKey";
+const DATA_KEY_BITS: i32 = 256;
 
 impl Vault {
     // Find an existing vault with the same name and config
@@ -128,6 +150,7 @@ impl Vault {
             vm,
             context,
             config: config.clone(),
+            unlock: Unlock::Locked,
         };
         let result = vault.with_env(|env| {
             let file = vault.get_file(env)?;
@@ -158,6 +181,7 @@ impl Vault {
             vm,
             context,
             config: config.clone(),
+            unlock: Unlock::Locked,
         };
         vault.initialize_config()?;
         vault.initialize_key()?;
@@ -220,6 +244,88 @@ impl Vault {
         Ok(ids)
     }
 
+    /// Fails while a vault whose key needs an approval per use is not unlocked.
+    fn check_unlocked(&self) -> AndroidKeyringResult<()> {
+        if self.config.user_auth_timeout == Some(0) && !matches!(self.unlock, Unlock::Unlocked(_)) {
+            return Err(AndroidKeyringError::UserNotAuthenticated);
+        }
+        Ok(())
+    }
+
+    /// Locks the vault and returns a cipher for the user to approve and [Vault::finish_unlock].
+    pub fn begin_unlock(&mut self) -> Result<GlobalRef> {
+        self.check_zero_timeout()?;
+        self.unlock = Unlock::Locked;
+        let (cipher, sealed) = self.with_env(|env| {
+            let key = self.get_key(env)?;
+            match self.get_file(env)?.get_binary(env, DATA_KEY_KEY)? {
+                Some(sealed) => Ok((decryption_cipher(env, &key, &sealed)?, Some(sealed))),
+                None => Ok((encryption_cipher(env, &key)?, None)),
+            }
+        })?;
+        let object = cipher.object().clone();
+        self.unlock = Unlock::Pending { cipher, sealed };
+        Ok(object)
+    }
+
+    /// Unlocks the vault with the approved cipher from the latest [Vault::begin_unlock].
+    pub fn finish_unlock(&mut self, approved: &JObject) -> Result<()> {
+        self.check_zero_timeout()?;
+        let not_latest = || {
+            let err = "is not the one from the latest unlock".to_string();
+            Error::Invalid("cipher".to_string(), err)
+        };
+        let Unlock::Pending { cipher, sealed } =
+            std::mem::replace(&mut self.unlock, Unlock::Locked)
+        else {
+            return Err(not_latest());
+        };
+        let data_key = self.with_env(|env| {
+            if !env.is_same_object(cipher.object(), approved)? {
+                return Err(not_latest().into());
+            }
+            let Some(sealed) = sealed else {
+                let generator = KeyGenerator::get_default_instance(env, KEY_ALGORITHM_AES)?;
+                generator.init_key_size(env, DATA_KEY_BITS)?;
+                let data_key = generator.generate_key(env)?;
+                let bytes = data_key.get_encoded(env)?;
+                let sealed = seal(env, &cipher, &bytes)
+                    .map_err(|_| AndroidKeyringError::UserNotAuthenticated)?;
+                let editor = self.get_file(env)?.edit(env)?;
+                editor.put_binary(env, DATA_KEY_KEY, &sealed)?.commit(env)?;
+                return Ok(data_key.into());
+            };
+            let bytes = match unseal(env, &cipher, sealed) {
+                Ok(bytes) => bytes,
+                // A tag mismatch means corrupt data, any other failure an unapproved cipher.
+                Err(e) => match Throwable::take_pending(env)? {
+                    Some(exception) if exception.is_instance_of(env, AEAD_BAD_TAG)? => {
+                        return Err(e);
+                    }
+                    _ => return Err(AndroidKeyringError::UserNotAuthenticated),
+                },
+            };
+            Ok(SecretKeySpec::new(env, &bytes, KEY_ALGORITHM_AES)?.into())
+        })?;
+        self.unlock = Unlock::Unlocked(data_key);
+        Ok(())
+    }
+
+    /// Locks the vault until the next [Vault::finish_unlock].
+    pub fn lock(&mut self) -> Result<()> {
+        self.check_zero_timeout()?;
+        self.unlock = Unlock::Locked;
+        Ok(())
+    }
+
+    fn check_zero_timeout(&self) -> Result<()> {
+        if self.config.user_auth_timeout != Some(0) {
+            let err = "Only stores with a user-auth-timeout of 0 are unlocked and locked";
+            return Err(Error::NotSupportedByStore(err.to_string()));
+        }
+        Ok(())
+    }
+
     #[cfg(feature = "compile-tests")]
     pub fn change_key(&self) -> Result<()> {
         self.with_env(|env| {
@@ -254,7 +360,11 @@ impl Vault {
         F: FnOnce(&mut JNIEnv, Key, SharedPreferences) -> AndroidKeyringResult<T>,
     {
         let wrapper = |env: &mut JNIEnv| -> AndroidKeyringResult<T> {
-            let key = self.get_key(env)?;
+            self.check_unlocked()?;
+            let key = match &self.unlock {
+                Unlock::Unlocked(data_key) => data_key.clone(),
+                _ => self.get_key(env)?,
+            };
             let file = self.get_file(env)?;
             f(env, key, file)
         };
@@ -292,6 +402,9 @@ impl Vault {
         let key_generator = KeyGenerator::get_instance(env, KEY_ALGORITHM_AES, PROVIDER)?;
         key_generator.init(env, key_generator_spec.into())?;
         let key = key_generator.generate_key(env)?;
+        // A data key sealed by an earlier Keystore key can never be unsealed again.
+        let editor = self.get_file(env)?.edit(env)?;
+        editor.remove(env, DATA_KEY_KEY)?.commit(env)?;
         Ok(key.into())
     }
 
