@@ -5,9 +5,12 @@ use jni::{
     objects::{GlobalRef, JObject, JValueGen},
 };
 
-use crate::methods::{
-    ClassDecl, Constructible, FromValue, JResult, Method, NoParam, SignatureComp, StaticMethod,
-    ToValue,
+use crate::{
+    methods::{
+        ClassDecl, Constructible, FromValue, JResult, Method, NoParam, SignatureComp, StaticMethod,
+        ToValue,
+    },
+    throwable::Throwable,
 };
 
 pub const BLOCK_MODE_GCM: &str = "GCM";
@@ -449,5 +452,76 @@ impl ToValue for AlgorithmParameterSpec {
 impl AlgorithmParameterSpec {
     fn class() -> ClassDecl {
         ClassDecl("Ljava/security/spec/AlgorithmParameterSpec;")
+    }
+}
+
+const INVALID_KEY: ClassDecl = ClassDecl("Ljava/security/InvalidKeyException;");
+const KEY_PERMANENTLY_INVALIDATED: ClassDecl =
+    ClassDecl("Landroid/security/keystore/KeyPermanentlyInvalidatedException;");
+const KEYSTORE_EXCEPTION: ClassDecl = ClassDecl("Landroid/security/KeyStoreException;");
+// KeyMint INVALID_AUTHORIZATION_TIMEOUT, which some TEEs return just after a timeout expires.
+const INVALID_AUTHORIZATION_TIMEOUT: i32 = -16;
+
+/// Whether `exception` is the refusal that some devices give a time-bound key, instead of
+/// `UserNotAuthenticatedException`, for a moment after its timeout expires.
+pub fn is_expired_timeout(env: &mut JNIEnv, exception: &Throwable) -> bool {
+    match keystore_code(env, exception) {
+        Ok(code) => code == Some(INVALID_AUTHORIZATION_TIMEOUT),
+        Err(_) => {
+            // A failed inspection leaves its own exception pending.
+            let _ = env.exception_clear();
+            false
+        }
+    }
+}
+
+/// The internal Keystore code of an `InvalidKeyException` caused by a `KeyStoreException`.
+fn keystore_code(env: &mut JNIEnv, exception: &Throwable) -> JResult<Option<i32>> {
+    if !exception.is_instance_of(env, INVALID_KEY)?
+        || exception.is_instance_of(env, KEY_PERMANENTLY_INVALIDATED)?
+    {
+        return Ok(None);
+    }
+    let Some(cause) = exception.get_cause(env)? else {
+        return Ok(None);
+    };
+    if !cause.is_instance_of(env, KEYSTORE_EXCEPTION)? {
+        return Ok(None);
+    }
+    // getNumericErrorCode gives the public code, so the internal one is read from the message.
+    Ok(cause
+        .get_message(env)?
+        .as_deref()
+        .and_then(keystore_code_in))
+}
+
+/// The internal Keystore code in a `KeyStoreException` message.
+fn keystore_code_in(message: &str) -> Option<i32> {
+    let (_, rest) = message.split_once("internal Keystore code: ")?;
+    let end = rest
+        .char_indices()
+        .find(|&(i, c)| !(c.is_ascii_digit() || (i == 0 && c == '-')))
+        .map_or(rest.len(), |(i, _)| i);
+    rest[..end].parse().ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::keystore_code_in;
+
+    #[test]
+    fn reads_the_internal_keystore_code_from_a_message() {
+        let m52 = "Invalid user authentication validity duration (internal Keystore code: -16 \
+                   message: In create_operation: Failed to begin operation. 10370";
+        assert_eq!(keystore_code_in(m52), Some(-16));
+        let emulator =
+            "Key user not authenticated (public error code: 2 internal Keystore code: -26)";
+        assert_eq!(keystore_code_in(emulator), Some(-26));
+        assert_eq!(
+            keystore_code_in("x (internal Keystore code: -160)"),
+            Some(-160)
+        );
+        assert_eq!(keystore_code_in("Keystore operation failed"), None);
+        assert_eq!(keystore_code_in("internal Keystore code: -"), None);
     }
 }
