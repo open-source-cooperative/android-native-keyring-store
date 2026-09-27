@@ -14,7 +14,7 @@ use crate::{
     keystore::{
         AUTH_BIOMETRIC_STRONG, AUTH_DEVICE_CREDENTIAL, BLOCK_MODE_GCM, ENCRYPTION_PADDING_NONE,
         KEY_ALGORITHM_AES, Key, KeyGenParameterSpecBuilder, KeyGenerator, KeyStore, PROVIDER,
-        PURPOSE_DECRYPT, PURPOSE_ENCRYPT, SecretKeySpec,
+        PURPOSE_DECRYPT, PURPOSE_ENCRYPT, SecretKeySpec, is_expired_timeout,
     },
     methods::ClassDecl,
     shared_preferences::{Context, MODE_PRIVATE, SharedPreferences},
@@ -348,7 +348,10 @@ impl Vault {
         let result = f(&mut env);
         if let Some(exception) = Throwable::take_pending(&mut env)? {
             log::error!("Exception in vault {:?}: see console", self.config.name);
-            if exception.is_instance_of(&mut env, USER_NOT_AUTHENTICATED)? {
+            if exception.is_instance_of(&mut env, USER_NOT_AUTHENTICATED)?
+                || (self.config.user_auth_timeout.is_some()
+                    && is_expired_timeout(&mut env, &exception))
+            {
                 return Err(AndroidKeyringError::UserNotAuthenticated);
             }
         }
