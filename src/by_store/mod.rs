@@ -33,6 +33,9 @@ Accessing a store's SharedPreference file directly is not recommended. To avoid
 interactions with third-party software that might do so, store operations are careful to
 ignore entries that don't look like they are credential IDs.
 
+Creating a store whose file holds credentials but whose Keystore key is gone fails with
+[BadStoreFormat](keyring_core::Error::BadStoreFormat), and deleting it removes the file.
+
 ## Ambiguity
 
 Stores do not allow either user or service names to contain the

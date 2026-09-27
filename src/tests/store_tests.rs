@@ -3,7 +3,7 @@ use std::panic::catch_unwind;
 
 use android_log_sys::LogPriority;
 
-use keyring_core::Entry;
+use keyring_core::{Entry, api::CredentialStoreApi};
 
 pub fn run_tests() -> (usize, usize) {
     let testing = [
@@ -13,6 +13,8 @@ pub fn run_tests() -> (usize, usize) {
         ("concurrent_access", concurrent_access),
         ("search", search),
         ("teardown", teardown),
+        ("lost_key", lost_key),
+        ("exists", exists),
     ]
     .iter()
     .map(|(name, entry)| {
@@ -211,5 +213,102 @@ fn search() -> keyring_core::Result<()> {
     if both.len() != 2 {
         return bad_result("both", &format!("2, got {}", both.len()));
     }
+    Ok(())
+}
+
+const LOST_KEY_CONFIG: [(&str, &str); 2] = [("name", "lost-key-test"), ("divider", "@")];
+
+fn lost_key() -> keyring_core::Result<()> {
+    let config = HashMap::from(LOST_KEY_CONFIG);
+    crate::Store::delete(&config)?;
+    let store = crate::Store::new_with_configuration(&config)?;
+    store
+        .build("lost-service", "lost-user", None)?
+        .set_password("p")?;
+    store.remove_key()?;
+    drop(store);
+    crate::by_store::clear_vault_list();
+    match crate::Store::new_with_configuration(&config) {
+        Err(keyring_core::Error::BadStoreFormat(_)) => {}
+        r => {
+            return bad_result(
+                "new_with_configuration",
+                &format!("BadStoreFormat, got {r:?}"),
+            );
+        }
+    }
+    // A different config is refused even without the key, and removes nothing.
+    let other = HashMap::from([("name", "lost-key-test"), ("divider", "#")]);
+    match crate::Store::delete(&other) {
+        Err(keyring_core::Error::Invalid(key, _)) if key == "divider" => {}
+        r => return bad_result("delete", &format!("Invalid(divider), got {r:?}")),
+    }
+    if !crate::Store::delete(&config)? {
+        return bad_result("delete", "true for a store whose key is gone");
+    }
+    let store = crate::Store::new_with_configuration(&config)?;
+    match store
+        .build("lost-service", "lost-user", None)?
+        .get_password()
+    {
+        Err(keyring_core::Error::NoEntry) => {}
+        r => {
+            return bad_result(
+                "get_password",
+                &format!("NoEntry after the wipe, got {r:?}"),
+            );
+        }
+    }
+    // A keyless store without credentials is recreated.
+    store.remove_key()?;
+    drop(store);
+    crate::by_store::clear_vault_list();
+    crate::Store::new_with_configuration(&config)?;
+    crate::by_store::clear_vault_list();
+    crate::Store::delete(&config)?;
+    Ok(())
+}
+
+const EXISTS_CONFIG: [(&str, &str); 2] = [("name", "exists-test"), ("divider", "@")];
+
+fn exists() -> keyring_core::Result<()> {
+    let config = HashMap::from(EXISTS_CONFIG);
+    crate::Store::delete(&config)?;
+    let expect = |op: &str, expected: bool| -> keyring_core::Result<()> {
+        match crate::Store::exists(&config) {
+            Ok(found) if found == expected => Ok(()),
+            r => bad_result(op, &format!("{expected}, got {r:?}")),
+        }
+    };
+    expect("exists before creation", false)?;
+    // Checking creates nothing that delete could find.
+    if crate::Store::delete(&config)? {
+        return bad_result("delete", "false after exists on a missing store");
+    }
+    let store = crate::Store::new_with_configuration(&config)?;
+    expect("exists while open", true)?;
+    store
+        .build("exists-service", "exists-user", None)?
+        .set_password("p")?;
+    store.remove_key()?;
+    drop(store);
+    crate::by_store::clear_vault_list();
+    expect("exists with credentials and no key", true)?;
+    let other = HashMap::from([("name", "exists-test"), ("divider", "#")]);
+    match crate::Store::exists(&other) {
+        Err(keyring_core::Error::Invalid(key, _)) if key == "divider" => {}
+        r => return bad_result("exists", &format!("Invalid(divider), got {r:?}")),
+    }
+    crate::Store::delete(&config)?;
+    expect("exists after delete", false)?;
+    // A keyless file without credentials loses nothing, so it counts as absent.
+    let store = crate::Store::new_with_configuration(&config)?;
+    store.remove_key()?;
+    drop(store);
+    crate::by_store::clear_vault_list();
+    expect("exists without key or credentials", false)?;
+    crate::Store::new_with_configuration(&config)?;
+    crate::by_store::clear_vault_list();
+    crate::Store::delete(&config)?;
     Ok(())
 }
