@@ -38,21 +38,23 @@ pub fn lookup(config: &StoreConfig) -> Result<AtomicVault> {
         .lock()
         .expect("Vaults list lock poisoned: report a bug!");
     // first check the list of instantiated vaults for a matching name
-    for vault in vaults.iter() {
-        let guard = vault.lock().expect("Vault lock poisoned: report a bug!");
-        if config.name == guard.config.name {
-            config.diff(&guard.config)?;
-            log::debug!("Found already-in-use vault {:?}", config.name);
-            return Ok(vault.clone());
-        }
+    if let Some(vault) = in_use(&vaults, config)? {
+        log::debug!("Found already-in-use vault {:?}", config.name);
+        return Ok(vault.clone());
     }
     // next look for or create a matching vault with the same filename
     let vault = match Vault::find(config)? {
-        Some(vault) => {
+        (Found::Present, vault) => {
             log::debug!("Found existing-but-not-in-use vault {:?}", config.name);
             vault
         }
-        None => {
+        (Found::KeyLost, _) => {
+            return Err(Error::BadStoreFormat(format!(
+                "Keystore key {:?} is missing",
+                config.filename
+            )));
+        }
+        (Found::Absent, _) => {
             log::debug!("Creating new vault {:?}", config.name);
             Vault::new(config)?
         }
@@ -72,21 +74,52 @@ pub fn delete(config: &StoreConfig) -> Result<bool> {
     let vaults = VAULTS
         .lock()
         .expect("Vaults list lock poisoned: report a bug!");
-    for vault in vaults.iter() {
+    if in_use(&vaults, config)?.is_some() {
+        log::debug!("Found already-in-use vault for {}", config.name);
+        return Err(Error::NotSupportedByStore("Store is in use".to_string()));
+    }
+    match Vault::find(config)? {
+        (Found::Present, vault) => {
+            log::debug!("Found existing vault to delete for {}", config.name);
+            vault.delete()?;
+            Ok(true)
+        }
+        (Found::KeyLost, vault) => {
+            log::debug!("Deleting file of vault {} whose key is gone", config.name);
+            if !vault.with_env(|env| vault.delete_file(env))? {
+                log::warn!("Failed to find file {:?}", config.filename);
+            }
+            Ok(true)
+        }
+        (Found::Absent, _) => {
+            log::debug!("No existing vault found to delete");
+            Ok(false)
+        }
+    }
+}
+
+/// Whether a vault exists, without creating it or needing its key.
+pub fn exists(config: &StoreConfig) -> Result<bool> {
+    let vaults = VAULTS
+        .lock()
+        .expect("Vaults list lock poisoned: report a bug!");
+    if in_use(&vaults, config)?.is_some() {
+        return Ok(true);
+    }
+    let (found, _) = Vault::find(config)?;
+    Ok(!matches!(found, Found::Absent))
+}
+
+/// The instantiated vault with this config's name, which must have the same config.
+fn in_use<'a>(vaults: &'a [AtomicVault], config: &StoreConfig) -> Result<Option<&'a AtomicVault>> {
+    for vault in vaults {
         let guard = vault.lock().expect("Vault lock poisoned: report a bug!");
         if config.name == guard.config.name {
             config.diff(&guard.config)?;
-            log::debug!("Found already-in-use vault for {}", config.name);
-            return Err(Error::NotSupportedByStore("Store is in use".to_string()));
+            return Ok(Some(vault));
         }
     }
-    if let Some(vault) = Vault::find(config)? {
-        log::debug!("Found existing vault to delete for {}", config.name);
-        vault.delete()?;
-        return Ok(true);
-    }
-    log::debug!("No existing vault found to delete");
-    Ok(false)
+    Ok(None)
 }
 
 #[cfg(feature = "compile-tests")]
@@ -116,29 +149,44 @@ impl std::fmt::Debug for Vault {
 
 const CONFIG_KEY: &str = "vaultConfig";
 
+/// The result of [Vault::find].
+#[derive(Clone, Copy)]
+enum Found {
+    Absent,
+    Present,
+    /// The file holds credentials but the Keystore key is gone.
+    KeyLost,
+}
+
 impl Vault {
     // Find an existing vault with the same name and config
-    fn find(config: &StoreConfig) -> Result<Option<Self>> {
+    fn find(config: &StoreConfig) -> Result<(Found, Self)> {
         let (vm, context) = crate::android_context()?;
         let vault = Self {
             vm,
             context,
             config: config.clone(),
         };
-        let result = vault.with_env(|env| {
+        let found = vault.with_env(|env| {
             let file = vault.get_file(env)?;
-            if let Some(config_val) = file.get_string(env, CONFIG_KEY)?
-                && vault.get_key(env).is_ok()
-            {
-                let existing = serde_json::from_str::<StoreConfig>(&config_val)
-                    .map_err(|_| Error::BadStoreFormat("Invalid configuration".to_string()))?;
-                config.diff(&existing)?;
-                Ok(true)
-            } else {
-                Ok(false)
+            let Some(config_val) = file.get_string(env, CONFIG_KEY)? else {
+                return Ok(Found::Absent);
+            };
+            let existing = serde_json::from_str::<StoreConfig>(&config_val)
+                .map_err(|_| Error::BadStoreFormat("Invalid configuration".to_string()))?;
+            config.diff(&existing)?;
+            if vault.find_key(env)?.is_none() {
+                // A keyless file without credentials loses nothing, so it counts as absent.
+                let keys = file.get_all(env)?.get_keys(env)?;
+                return Ok(if keys.iter().any(|key| vault.split_id(key).is_some()) {
+                    Found::KeyLost
+                } else {
+                    Found::Absent
+                });
             }
+            Ok(Found::Present)
         })?;
-        if result { Ok(Some(vault)) } else { Ok(None) }
+        Ok((found, vault))
     }
 
     fn new(config: &StoreConfig) -> Result<Self> {
@@ -204,8 +252,7 @@ impl Vault {
             let file = self.get_file(env)?;
             let keys = file.get_all(env)?.get_keys(env)?;
             for key in keys {
-                if let Some((user, service)) = key.split_once(&self.config.divider)
-                    && !service.contains(&self.config.divider)
+                if let Some((user, service)) = self.split_id(&key)
                     && re.is_match(&key)
                 {
                     ids.push((key.clone(), service.to_string(), user.to_string()));
@@ -216,6 +263,13 @@ impl Vault {
         Ok(ids)
     }
 
+    /// The (user, service) of a credential ID, which has exactly one divider.
+    fn split_id<'a>(&self, id: &'a str) -> Option<(&'a str, &'a str)> {
+        let divider = &self.config.divider;
+        id.split_once(divider)
+            .filter(|(_, service)| !service.contains(divider))
+    }
+
     #[cfg(feature = "compile-tests")]
     pub fn change_key(&self) -> Result<()> {
         self.with_env(|env| {
@@ -223,6 +277,12 @@ impl Vault {
             self.create_key(env)?;
             Ok(())
         })?;
+        Ok(())
+    }
+
+    #[cfg(feature = "compile-tests")]
+    pub fn remove_key(&self) -> Result<()> {
+        self.with_env(|env| self.delete_key(env))?;
         Ok(())
     }
 }
@@ -282,16 +342,17 @@ impl Vault {
     }
 
     fn get_key(&self, env: &mut JNIEnv) -> AndroidKeyringResult<Key> {
+        self.find_key(env)?
+            .ok_or_else(|| Error::BadStoreFormat("Encryption key not found".to_string()).into())
+    }
+
+    fn find_key(&self, env: &mut JNIEnv) -> AndroidKeyringResult<Option<Key>> {
         let _lock = KEY_SERVICE_LOCK
             .lock()
             .expect("Key service lock poisoned: report a bug!");
         let keystore = KeyStore::get_instance(env, PROVIDER)?;
         keystore.load(env)?;
-        if let Some(key) = keystore.get_key(env, &self.config.filename)? {
-            Ok(key)
-        } else {
-            Err(Error::BadStoreFormat("Encryption key not found".to_string()).into())
-        }
+        Ok(keystore.get_key(env, &self.config.filename)?)
     }
 
     fn delete_key(&self, env: &mut JNIEnv) -> AndroidKeyringResult<()> {
