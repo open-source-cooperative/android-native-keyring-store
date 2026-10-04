@@ -1,4 +1,7 @@
-use crate::methods::{ClassDecl, FromValue, JResult, Method, NoParam, SignatureComp};
+use crate::{
+    keyguard::KeyguardManager,
+    methods::{ClassDecl, FromValue, JResult, Method, NoParam, SignatureComp},
+};
 use base64::{Engine, prelude::BASE64_STANDARD};
 #[cfg(feature = "compile-tests")]
 use jni::objects::JObject;
@@ -54,6 +57,18 @@ impl Context {
         }
 
         ThisMethod::call(&self.self_, env, name)
+    }
+
+    pub fn get_keyguard_manager(&self, env: &mut JNIEnv) -> JResult<KeyguardManager> {
+        struct ThisMethod<'a>(PhantomData<&'a ()>);
+        impl<'a> Method for ThisMethod<'a> {
+            type Param = &'a str;
+            type Return = KeyguardManager;
+
+            const NAME: &'static str = "getSystemService";
+        }
+
+        ThisMethod::call(&self.self_, env, "keyguard")
     }
 
     #[cfg(feature = "legacy")]

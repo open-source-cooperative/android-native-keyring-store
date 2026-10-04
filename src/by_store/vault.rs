@@ -207,9 +207,22 @@ impl Vault {
             context,
             config: config.clone(),
         };
+        if config.user_auth_timeout.is_some() && !vault.device_secure()? {
+            return Err(Error::NotSupportedByStore(
+                "user authentication needs a secure lock screen".to_string(),
+            ));
+        }
         vault.initialize_config()?;
         vault.initialize_key()?;
         Ok(vault)
+    }
+
+    fn device_secure(&self) -> Result<bool> {
+        Ok(self.with_env(|env| {
+            Ok(Context::from_raw(self.context.clone())
+                .get_keyguard_manager(env)?
+                .is_device_secure(env)?)
+        })?)
     }
 
     fn initialize_config(&mut self) -> Result<()> {

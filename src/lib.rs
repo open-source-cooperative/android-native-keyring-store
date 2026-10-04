@@ -61,6 +61,7 @@ mod android_log;
 mod cipher;
 mod crypto;
 mod error;
+mod keyguard;
 mod keystore;
 #[cfg(any(feature = "android-log", feature = "compile-tests"))]
 mod logcat;
