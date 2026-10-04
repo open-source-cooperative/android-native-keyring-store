@@ -63,7 +63,8 @@ not to be valid credentials.
 With `user-auth-required` set to `true`, a store opens for `user-auth-timeout` seconds after the
 user authenticates with a strong biometric or the device credential, and otherwise fails with
 [NoStorageAccess](keyring_core::Error::NoStorageAccess). It needs a non-default `name`,
-Android 11 and a secure lock screen, whose removal destroys its key.
+Android 11 and a secure lock screen, whose removal destroys its key. Without a secure lock
+screen, creating it fails with [NotSupportedByStore](keyring_core::Error::NotSupportedByStore).
  */
 mod vault;
 #[cfg(feature = "compile-tests")]

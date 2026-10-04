@@ -16,6 +16,7 @@ pub fn run_tests() -> (usize, usize) {
         ("user_auth_timeout", user_auth_timeout),
         ("lost_key", lost_key),
         ("exists", exists),
+        ("no_lock_screen", no_lock_screen),
     ]
     .iter()
     // user_auth_timeout needs a secure lock screen and a device unlocked in the last 300 seconds.
@@ -346,4 +347,28 @@ fn exists() -> keyring_core::Result<()> {
     crate::by_store::clear_vault_list();
     crate::Store::delete(&config)?;
     Ok(())
+}
+
+const NO_LOCK_CONFIG: [(&str, &str); 4] = [
+    ("name", "no-lock-test"),
+    ("divider", "@"),
+    ("user-auth-required", "true"),
+    ("user-auth-timeout", "30"),
+];
+
+// Only a device without a secure lock screen refuses; on one with a lock screen the store opens.
+fn no_lock_screen() -> keyring_core::Result<()> {
+    let config = HashMap::from(NO_LOCK_CONFIG);
+    match crate::Store::new_with_configuration(&config) {
+        Ok(_) => {
+            crate::by_store::clear_vault_list();
+            crate::Store::delete(&config)?;
+            Ok(())
+        }
+        Err(keyring_core::Error::NotSupportedByStore(_)) => Ok(()),
+        r => bad_result(
+            "new_with_configuration",
+            &format!("NotSupportedByStore, got {r:?}"),
+        ),
+    }
 }
