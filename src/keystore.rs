@@ -110,7 +110,7 @@ impl KeyStore {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Key {
     self_: GlobalRef,
 }
@@ -159,6 +159,54 @@ impl SecretKey {
     fn class() -> ClassDecl {
         ClassDecl("Ljavax/crypto/SecretKey;")
     }
+
+    pub fn get_encoded(&self, env: &mut JNIEnv) -> JResult<Vec<u8>> {
+        struct ThisMethod;
+        impl Method for ThisMethod {
+            type Param = NoParam;
+            type Return = Vec<u8>;
+
+            const NAME: &str = "getEncoded";
+        }
+
+        ThisMethod::call(&self.self_, env, NoParam)
+    }
+}
+
+pub struct SecretKeySpec {
+    self_: GlobalRef,
+}
+
+impl FromValue for SecretKeySpec {
+    fn signature() -> SignatureComp {
+        Self::class().into()
+    }
+
+    fn from_object(self_: GlobalRef, _env: &mut JNIEnv) -> JResult<Self> {
+        Ok(Self { self_ })
+    }
+}
+
+impl SecretKeySpec {
+    fn class() -> ClassDecl {
+        ClassDecl("Ljavax/crypto/spec/SecretKeySpec;")
+    }
+
+    pub fn new(env: &mut JNIEnv, key: &[u8], algorithm: &str) -> JResult<Self> {
+        struct ThisMethod<'a>(PhantomData<&'a ()>);
+        impl<'a> Constructible for ThisMethod<'a> {
+            type Param = (&'a [u8], &'a str);
+            type Return = SecretKeySpec;
+        }
+
+        ThisMethod::call_new(Self::class(), env, (key, algorithm))
+    }
+}
+
+impl From<SecretKeySpec> for Key {
+    fn from(value: SecretKeySpec) -> Self {
+        Key { self_: value.self_ }
+    }
 }
 
 impl From<SecretKey> for Key {
@@ -196,6 +244,31 @@ impl KeyGenerator {
         }
 
         ThisMethod::call(Self::class(), env, (algorithm, provider))
+    }
+
+    /// A generator of software keys, from the default provider.
+    pub fn get_default_instance(env: &mut JNIEnv, algorithm: &str) -> JResult<Self> {
+        struct ThisMethod<'a>(PhantomData<&'a ()>);
+        impl<'a> StaticMethod for ThisMethod<'a> {
+            type Param = &'a str;
+            type Return = KeyGenerator;
+
+            const NAME: &'static str = "getInstance";
+        }
+
+        ThisMethod::call(Self::class(), env, algorithm)
+    }
+
+    pub fn init_key_size(&self, env: &mut JNIEnv, bits: i32) -> JResult<()> {
+        struct ThisMethod;
+        impl Method for ThisMethod {
+            type Param = i32;
+            type Return = ();
+
+            const NAME: &str = "init";
+        }
+
+        ThisMethod::call(&self.self_, env, bits)
     }
 
     pub fn init(&self, env: &mut JNIEnv, spec: AlgorithmParameterSpec) -> JResult<()> {

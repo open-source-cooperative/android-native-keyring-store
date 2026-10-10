@@ -1,11 +1,15 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::HashMap,
+    sync::{Arc, MutexGuard},
+};
 
+use jni::objects::{GlobalRef, JObject};
 use keyring_core::{Entry, Error, Result, api::CredentialStoreApi, attributes::parse_attributes};
 use regex::{Error as RegexError, Regex};
 use serde::{Deserialize, Serialize};
 
 use super::Cred;
-use super::vault::{AtomicVault, delete, exists, lookup};
+use super::vault::{AtomicVault, Vault, delete, exists, lookup};
 
 /// The configurable parts of a Store.
 ///
@@ -17,7 +21,8 @@ pub struct StoreConfig {
     pub name: String,
     pub filename: String,
     pub divider: String,
-    /// Seconds that one user authentication opens the store's key for, if it needs one.
+    /// Seconds that one user authentication opens the store's key for, if it needs one, or `0`
+    /// to open it from [Store::finish_unlock] until [Store::lock].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub user_auth_timeout: Option<u32>,
 }
@@ -97,8 +102,8 @@ impl StoreConfig {
                 timeout
                     .parse::<u32>()
                     .ok()
-                    .filter(|seconds| (1..=i32::MAX.unsigned_abs()).contains(seconds))
-                    .ok_or_else(|| timeout_err("must be from 1 to 2147483647 seconds"))?,
+                    .filter(|seconds| *seconds <= i32::MAX.unsigned_abs())
+                    .ok_or_else(|| timeout_err("must be from 0 to 2147483647 seconds"))?,
             ),
             (true, None) => return Err(timeout_err("is required with user-auth-required")),
             (false, Some(_)) => return Err(timeout_err("requires user-auth-required")),
@@ -204,22 +209,37 @@ impl Store {
         exists(&config)
     }
 
+    /// Locks a store with a `user-auth-timeout` of `0` and returns the `javax.crypto.Cipher`
+    /// to approve in a `BiometricPrompt` allowing `BIOMETRIC_STRONG` and `DEVICE_CREDENTIAL`.
+    pub fn begin_unlock(&self) -> Result<GlobalRef> {
+        self.vault().begin_unlock()
+    }
+
+    /// Unlocks every [Store] with this name, given the approved cipher from the latest
+    /// [Store::begin_unlock].
+    pub fn finish_unlock(&self, cipher: &JObject) -> Result<()> {
+        self.vault().finish_unlock(cipher)
+    }
+
+    /// Locks every [Store] with this name until the next [Store::finish_unlock].
+    pub fn lock(&self) -> Result<()> {
+        self.vault().lock()
+    }
+
     #[cfg(feature = "compile-tests")]
     pub fn change_key(&self) -> Result<()> {
-        let vault = self
-            .vault
+        self.vault().change_key()
+    }
+
+    fn vault(&self) -> MutexGuard<'_, Vault> {
+        self.vault
             .lock()
-            .expect("Vault lock poisoned: report a bug!");
-        vault.change_key()
+            .expect("Vault lock poisoned: report a bug!")
     }
 
     #[cfg(feature = "compile-tests")]
     pub fn remove_key(&self) -> Result<()> {
-        let vault = self
-            .vault
-            .lock()
-            .expect("Vault lock poisoned: report a bug!");
-        vault.remove_key()
+        self.vault().remove_key()
     }
 }
 
@@ -301,10 +321,7 @@ impl CredentialStoreApi for Store {
         let service_exp = Regex::new(&service_spec).map_err(|e| spec_err("service", e))?;
         let user_spec = spec.get("user").cloned().unwrap_or_default();
         let user_exp = Regex::new(&user_spec).map_err(|e| spec_err("user", e))?;
-        let vault = self
-            .vault
-            .lock()
-            .expect("Vault lock poisoned: report a bug!");
+        let vault = self.vault();
         let mut results = Vec::new();
         let triples = vault.get_ids(&id_exp)?;
         for (id, service, user) in triples.iter() {
@@ -373,14 +390,16 @@ mod tests {
 
     #[test]
     fn user_auth_timeout_must_fit_the_keystore_range() {
-        for timeout in ["0", "-1", "2147483648", "soon"] {
+        for timeout in ["-1", "2147483648", "soon"] {
             assert_invalid(
                 &[NAME, REQUIRED, ("user-auth-timeout", timeout)],
                 "user-auth-timeout",
             );
         }
-        let config = parse(&[NAME, REQUIRED, ("user-auth-timeout", "2147483647")]).unwrap();
-        assert_eq!(config.user_auth_timeout, Some(2147483647));
+        for (timeout, seconds) in [("0", 0), ("2147483647", 2147483647)] {
+            let config = parse(&[NAME, REQUIRED, ("user-auth-timeout", timeout)]).unwrap();
+            assert_eq!(config.user_auth_timeout, Some(seconds));
+        }
     }
 
     #[test]
