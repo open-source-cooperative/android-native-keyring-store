@@ -1,4 +1,4 @@
-use android_log_sys::{__android_log_write, LogPriority};
+use android_log_sys::LogPriority;
 use jni::{
     JNIEnv,
     objects::{JObject, JString},
@@ -76,9 +76,7 @@ where
         let message = SpanPrefix::on_event(event, ctx);
         let message = CString::new(message).unwrap_or_default();
 
-        unsafe {
-            __android_log_write(priority as i32, tag.as_ptr(), message.as_ptr());
-        }
+        crate::logcat::write(priority, &tag, &message);
     }
 }
 

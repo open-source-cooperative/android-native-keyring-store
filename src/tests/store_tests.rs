@@ -1,10 +1,9 @@
 use std::collections::HashMap;
-use std::ffi::CString;
 use std::panic::catch_unwind;
 
-use android_log_sys::{__android_log_write, LogPriority};
+use android_log_sys::LogPriority;
 
-use keyring_core::Entry;
+use keyring_core::{Entry, api::CredentialStoreApi};
 
 pub fn run_tests() -> (usize, usize) {
     let testing = [
@@ -14,8 +13,13 @@ pub fn run_tests() -> (usize, usize) {
         ("concurrent_access", concurrent_access),
         ("search", search),
         ("teardown", teardown),
+        ("user_auth_timeout", user_auth_timeout),
+        ("lost_key", lost_key),
+        ("exists", exists),
     ]
     .iter()
+    // user_auth_timeout needs a secure lock screen and a device unlocked in the last 300 seconds.
+    .filter(|(name, _)| cfg!(feature = "user-auth-tests") || *name != "user_auth_timeout")
     .map(|(name, entry)| {
         (name, move || -> keyring_core::Result<()> {
             catch_unwind(entry)
@@ -28,12 +32,7 @@ pub fn run_tests() -> (usize, usize) {
     })
     .collect::<Vec<_>>();
 
-    let msg = c"Running Store tests...";
-    let tag = c"unit-test";
-    let level = LogPriority::INFO as i32;
-    unsafe {
-        __android_log_write(level, tag.as_ptr(), msg.as_ptr());
-    }
+    super::report(LogPriority::INFO, "Running Store tests...");
     let mut successes = 0;
     let mut failures = 0;
     for (name, testing) in testing {
@@ -41,33 +40,23 @@ pub fn run_tests() -> (usize, usize) {
         let msg;
         match testing() {
             Ok(()) => {
-                level = LogPriority::INFO as i32;
+                level = LogPriority::INFO;
                 msg = format!("{name} success");
                 successes += 1;
             }
             Err(e) => {
-                level = LogPriority::ERROR as i32;
+                level = LogPriority::ERROR;
                 msg = format!("{name} error: {e:?}");
                 failures += 1;
             }
         }
 
-        let msg = CString::new(msg).unwrap();
-        let tag = c"unit-test";
-        unsafe {
-            __android_log_write(level, tag.as_ptr(), msg.as_ptr());
-        }
+        super::report(level, &msg);
     }
-    let msg = CString::new(format!(
-        "Store: {} successes, {} failures",
-        successes, failures
-    ))
-    .unwrap();
-    let tag = c"unit-test";
-    let level = LogPriority::INFO as i32;
-    unsafe {
-        __android_log_write(level, tag.as_ptr(), msg.as_ptr());
-    }
+    super::report(
+        LogPriority::INFO,
+        &format!("Store: {} successes, {} failures", successes, failures),
+    );
     (successes, failures)
 }
 
@@ -101,6 +90,8 @@ fn teardown() -> keyring_core::Result<()> {
 
 pub fn cleanup() -> keyring_core::Result<()> {
     // make sure there's nothing left from prior runs, and test store deletion
+    crate::Store::delete(&HashMap::from(AUTH_OPEN_CONFIG))?;
+    crate::Store::delete(&HashMap::from(AUTH_EXPIRED_CONFIG))?;
     let store_config = HashMap::from(STORE_CONFIG);
     if crate::Store::delete(&store_config)? {
         log::info!("Test store successfully deleted");
@@ -193,10 +184,8 @@ fn concurrent_access() -> keyring_core::Result<()> {
         })?;
     }
     let entry = Entry::new("concurrent", "user")?;
-    match entry.get_password() {
-        Ok(s) => log::debug!("thread {s} finished last"),
-        Err(e) => return Err(e),
-    }
+    let s = entry.get_password()?;
+    log::debug!("thread {s} finished last");
     Ok(())
 }
 
@@ -229,5 +218,132 @@ fn search() -> keyring_core::Result<()> {
     if both.len() != 2 {
         return bad_result("both", &format!("2, got {}", both.len()));
     }
+    Ok(())
+}
+
+const AUTH_OPEN_CONFIG: [(&str, &str); 4] = [
+    ("name", "auth-open-test"),
+    ("divider", "@"),
+    ("user-auth-required", "true"),
+    ("user-auth-timeout", "300"),
+];
+const AUTH_EXPIRED_CONFIG: [(&str, &str); 4] = [
+    ("name", "auth-expired-test"),
+    ("divider", "@"),
+    ("user-auth-required", "true"),
+    ("user-auth-timeout", "1"),
+];
+
+fn user_auth_timeout() -> keyring_core::Result<()> {
+    let store = crate::Store::new_with_configuration(&HashMap::from(AUTH_OPEN_CONFIG))?;
+    let entry = store.build("auth", "user", None)?;
+    entry.set_password("open")?;
+    match entry.get_password() {
+        Ok(p) if p == "open" => {}
+        r => return bad_result("get_password", &format!("'open', got {r:?}")),
+    }
+    let store = crate::Store::new_with_configuration(&HashMap::from(AUTH_EXPIRED_CONFIG))?;
+    let entry = store.build("auth", "user", None)?;
+    std::thread::sleep(std::time::Duration::from_secs(2));
+    match entry.set_password("expired") {
+        Err(keyring_core::Error::NoStorageAccess(_)) => Ok(()),
+        r => bad_result("set_password", &format!("NoStorageAccess, got {r:?}")),
+    }
+}
+
+const LOST_KEY_CONFIG: [(&str, &str); 2] = [("name", "lost-key-test"), ("divider", "@")];
+
+fn lost_key() -> keyring_core::Result<()> {
+    let config = HashMap::from(LOST_KEY_CONFIG);
+    crate::Store::delete(&config)?;
+    let store = crate::Store::new_with_configuration(&config)?;
+    store
+        .build("lost-service", "lost-user", None)?
+        .set_password("p")?;
+    store.remove_key()?;
+    drop(store);
+    crate::by_store::clear_vault_list();
+    match crate::Store::new_with_configuration(&config) {
+        Err(keyring_core::Error::BadStoreFormat(_)) => {}
+        r => {
+            return bad_result(
+                "new_with_configuration",
+                &format!("BadStoreFormat, got {r:?}"),
+            );
+        }
+    }
+    // A different config is refused even without the key, and removes nothing.
+    let other = HashMap::from([("name", "lost-key-test"), ("divider", "#")]);
+    match crate::Store::delete(&other) {
+        Err(keyring_core::Error::Invalid(key, _)) if key == "divider" => {}
+        r => return bad_result("delete", &format!("Invalid(divider), got {r:?}")),
+    }
+    if !crate::Store::delete(&config)? {
+        return bad_result("delete", "true for a store whose key is gone");
+    }
+    let store = crate::Store::new_with_configuration(&config)?;
+    match store
+        .build("lost-service", "lost-user", None)?
+        .get_password()
+    {
+        Err(keyring_core::Error::NoEntry) => {}
+        r => {
+            return bad_result(
+                "get_password",
+                &format!("NoEntry after the wipe, got {r:?}"),
+            );
+        }
+    }
+    // A keyless store without credentials is recreated.
+    store.remove_key()?;
+    drop(store);
+    crate::by_store::clear_vault_list();
+    crate::Store::new_with_configuration(&config)?;
+    crate::by_store::clear_vault_list();
+    crate::Store::delete(&config)?;
+    Ok(())
+}
+
+const EXISTS_CONFIG: [(&str, &str); 2] = [("name", "exists-test"), ("divider", "@")];
+
+fn exists() -> keyring_core::Result<()> {
+    let config = HashMap::from(EXISTS_CONFIG);
+    crate::Store::delete(&config)?;
+    let expect = |op: &str, expected: bool| -> keyring_core::Result<()> {
+        match crate::Store::exists(&config) {
+            Ok(found) if found == expected => Ok(()),
+            r => bad_result(op, &format!("{expected}, got {r:?}")),
+        }
+    };
+    expect("exists before creation", false)?;
+    // Checking creates nothing that delete could find.
+    if crate::Store::delete(&config)? {
+        return bad_result("delete", "false after exists on a missing store");
+    }
+    let store = crate::Store::new_with_configuration(&config)?;
+    expect("exists while open", true)?;
+    store
+        .build("exists-service", "exists-user", None)?
+        .set_password("p")?;
+    store.remove_key()?;
+    drop(store);
+    crate::by_store::clear_vault_list();
+    expect("exists with credentials and no key", true)?;
+    let other = HashMap::from([("name", "exists-test"), ("divider", "#")]);
+    match crate::Store::exists(&other) {
+        Err(keyring_core::Error::Invalid(key, _)) if key == "divider" => {}
+        r => return bad_result("exists", &format!("Invalid(divider), got {r:?}")),
+    }
+    crate::Store::delete(&config)?;
+    expect("exists after delete", false)?;
+    // A keyless file without credentials loses nothing, so it counts as absent.
+    let store = crate::Store::new_with_configuration(&config)?;
+    store.remove_key()?;
+    drop(store);
+    crate::by_store::clear_vault_list();
+    expect("exists without key or credentials", false)?;
+    crate::Store::new_with_configuration(&config)?;
+    crate::by_store::clear_vault_list();
+    crate::Store::delete(&config)?;
     Ok(())
 }

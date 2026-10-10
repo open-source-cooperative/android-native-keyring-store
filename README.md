@@ -89,7 +89,7 @@ Because the Android/Rust ecosystem is still relatively new, there is a lot of co
 
 There are two sample applications available that run on Android and use this crate.
 
-The first is the `Keyring Tester` application that is built according to the instructions here and whose source is available in the [`keyring-tester` folder](https://github.com/open-source-cooperative/android-native-keyring-store/tree/main/keyring-tester) of this crate’s [source repository](https://github.com/open-source-cooperative/android-native-keyring-store).
+The first is the `Keyring Tester` application that is built according to the instructions here and whose source is available in the [`keyring-tester` folder](https://github.com/open-source-cooperative/android-native-keyring-store/tree/main/keyring-tester) of this crate’s [source repository](https://github.com/open-source-cooperative/android-native-keyring-store). Its user authentication tests need the `user-auth-tests` feature and a device with a secure lock screen unlocked in the last five minutes.
 
 The second is the `Keyring Demo` [Tauri 2.0](https://v2.tauri.app) application whose source is available in the [Keyring Demo repository](https://github.com/open-source-cooperative/keyring-demo). This app is currently in closed pre-release on the Google Play Store, and is actively looking for beta testers; send an email to `keyring-demo` at `brotsky.com` if you would like to try it.
 

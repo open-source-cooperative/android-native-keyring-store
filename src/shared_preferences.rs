@@ -1,6 +1,6 @@
 use crate::methods::{ClassDecl, FromValue, JResult, Method, NoParam, SignatureComp};
 use base64::{Engine, prelude::BASE64_STANDARD};
-#[cfg(any(feature = "legacy", feature = "compile-tests"))]
+#[cfg(feature = "compile-tests")]
 use jni::objects::JObject;
 use jni::{
     JNIEnv,
@@ -16,7 +16,7 @@ pub struct Context {
 }
 
 impl Context {
-    #[cfg(any(feature = "legacy", feature = "compile-tests"))]
+    #[cfg(feature = "compile-tests")]
     pub fn new(env: &JNIEnv, obj: JObject) -> JResult<Self> {
         Ok(Self {
             self_: env.new_global_ref(obj)?,

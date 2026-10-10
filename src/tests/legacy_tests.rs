@@ -1,7 +1,6 @@
-use std::ffi::CString;
 use std::panic::catch_unwind;
 
-use android_log_sys::{__android_log_write, LogPriority};
+use android_log_sys::LogPriority;
 
 use keyring_core::Entry;
 
@@ -26,12 +25,7 @@ pub fn run_tests() -> (usize, usize) {
     })
     .collect::<Vec<_>>();
 
-    let msg = c"Running LegacyStore tests...";
-    let tag = c"unit-test";
-    let level = LogPriority::INFO as i32;
-    unsafe {
-        __android_log_write(level, tag.as_ptr(), msg.as_ptr());
-    }
+    super::report(LogPriority::INFO, "Running LegacyStore tests...");
     let mut successes = 0;
     let mut failures = 0;
     for (name, testing) in testing {
@@ -39,33 +33,23 @@ pub fn run_tests() -> (usize, usize) {
         let msg;
         match testing() {
             Ok(()) => {
-                level = LogPriority::INFO as i32;
+                level = LogPriority::INFO;
                 msg = format!("{name} success");
                 successes += 1;
             }
             Err(e) => {
-                level = LogPriority::ERROR as i32;
+                level = LogPriority::ERROR;
                 msg = format!("{name} error: {e:?}");
                 failures += 1;
             }
         }
 
-        let msg = CString::new(msg).unwrap();
-        let tag = c"unit-test";
-        unsafe {
-            __android_log_write(level, tag.as_ptr(), msg.as_ptr());
-        }
+        super::report(level, &msg);
     }
-    let msg = CString::new(format!(
-        "Legacy: {} successes, {} failures",
-        successes, failures
-    ))
-    .unwrap();
-    let tag = c"unit-test";
-    let level = LogPriority::INFO as i32;
-    unsafe {
-        __android_log_write(level, tag.as_ptr(), msg.as_ptr());
-    }
+    super::report(
+        LogPriority::INFO,
+        &format!("Legacy: {} successes, {} failures", successes, failures),
+    );
     (successes, failures)
 }
 
@@ -190,9 +174,7 @@ fn concurrent_access() -> keyring_core::Result<()> {
         })?;
     }
     let entry = Entry::new("concurrent", "user")?;
-    match entry.get_password() {
-        Ok(s) => log::debug!("thread {s} finished last"),
-        Err(e) => return Err(e),
-    }
+    let s = entry.get_password()?;
+    log::debug!("thread {s} finished last");
     Ok(())
 }

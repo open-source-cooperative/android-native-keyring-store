@@ -1,4 +1,4 @@
-use android_log_sys::{__android_log_write, LogPriority};
+use android_log_sys::LogPriority;
 use jni::{JNIEnv, objects::JObject};
 use std::ffi::CString;
 
@@ -38,27 +38,25 @@ pub extern "system" fn Java_io_crates_keyring_KeyringTests_00024Companion_runAll
     let failures = lf + sf + cf;
     #[cfg(not(feature = "legacy"))]
     let failures = sf + cf;
-    let msg = CString::new(format!(
-        "Overall: {} successes, {} failures",
-        successes, failures
-    ))
-    .unwrap();
-    let tag = c"unit-test";
-    let level = LogPriority::INFO as i32;
-    unsafe {
-        __android_log_write(level, tag.as_ptr(), msg.as_ptr());
-    }
+    report(
+        LogPriority::INFO,
+        &format!("Overall: {} successes, {} failures", successes, failures),
+    );
     match cleanup() {
         Ok(()) => log::info!("Successfully cleaned up tests"),
         Err(e) => {
-            let msg = CString::new(format!("Failed to clean up tests: {e}")).unwrap();
-            let tag = c"unit-test";
-            let level = LogPriority::ERROR as i32;
-            unsafe {
-                __android_log_write(level, tag.as_ptr(), msg.as_ptr());
-            }
+            report(
+                LogPriority::ERROR,
+                &format!("Failed to clean up tests: {e}"),
+            );
         }
     }
+}
+
+/// Logs `message` under the `unit-test` tag.
+pub fn report(priority: LogPriority, message: &str) {
+    let message = CString::new(message).unwrap();
+    crate::logcat::write(priority, c"unit-test", &message);
 }
 
 pub fn cleanup() -> Result<()> {

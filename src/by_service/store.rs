@@ -27,16 +27,8 @@ impl Store {
     /// Initializes the store using the AndroidContext available
     /// on the `ndk-context` crate.
     pub fn from_ndk_context() -> AndroidKeyringResult<Arc<Self>> {
-        let ctx = ndk_context::android_context();
-        let vm = ctx.vm().cast();
-        let activity = ctx.context();
-
-        let java_vm = unsafe { JavaVM::from_raw(vm)? };
-        let env = java_vm.attach_current_thread()?;
-
-        let j_context = unsafe { jni::objects::JObject::from_raw(activity as jni::sys::jobject) };
-        let context = Context::new(&env, j_context)?;
-        let java_vm = Arc::new(env.get_java_vm()?);
+        let (java_vm, context) = crate::android_context()?;
+        let context = Context::from_raw(context);
         let instance_id = generate_instance_id();
         Ok(Arc::new(Self {
             java_vm,

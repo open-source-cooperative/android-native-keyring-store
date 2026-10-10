@@ -18,6 +18,7 @@ crate-type = ["lib", "cdylib"]
 [features]
 legacy = []
 compile-tests = ["android_log-sys"]
+user-auth-tests = ["compile-tests"]
 android-log = ["android_log-sys", "tracing-subscriber/env-filter"]
 
 [dependencies]
@@ -33,6 +34,9 @@ serde_json = "1"
 thiserror = "2"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", optional = true }
+
+[lints.clippy]
+undocumented_unsafe_blocks = "deny"
 
 [package.metadata.docs.rs]
 targets = ["aarch64-linux-android"]

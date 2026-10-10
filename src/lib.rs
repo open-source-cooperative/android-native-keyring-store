@@ -38,10 +38,10 @@ crate provides detailed instructions for how to do this.
  */
 
 use std::ffi::c_void;
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 
 use jni::{
-    JNIEnv,
+    JNIEnv, JavaVM,
     objects::{GlobalRef, JObject},
 };
 
@@ -62,8 +62,11 @@ mod cipher;
 mod crypto;
 mod error;
 mod keystore;
+#[cfg(any(feature = "android-log", feature = "compile-tests"))]
+mod logcat;
 mod methods;
 mod shared_preferences;
+mod throwable;
 
 #[cfg(feature = "compile-tests")]
 pub mod tests;
@@ -72,7 +75,7 @@ pub mod tests;
 ///
 /// This JNI function can be called from your application's Java
 /// code to prepare the NDK context for use by this crate.
-/// (Some Android application frameworks do this for you.)
+/// (Some Android application frameworks do this for you, and calling it again aborts.)
 ///
 /// You can invoke this function automatically by defining it as
 /// a companion object's `init` function, as shown in the example
@@ -101,6 +104,8 @@ pub extern "system" fn Java_io_crates_keyring_Keyring_00024Companion_initializeN
         Ok(ref_) => {
             let vm = env.get_java_vm().unwrap();
             let vm = vm.get_java_vm_pointer() as *mut c_void;
+            // SAFETY: both pointers live for the process, and the app calls this before any store
+            // and only when no framework initialized ndk-context.
             unsafe {
                 ndk_context::initialize_android_context(vm, ref_.as_obj().as_raw() as _);
             }
@@ -112,4 +117,17 @@ pub extern "system" fn Java_io_crates_keyring_Keyring_00024Companion_initializeN
             None
         }
     });
+}
+
+/// The `JavaVM` and application context that `ndk-context` holds.
+fn android_context() -> error::AndroidKeyringResult<(Arc<JavaVM>, GlobalRef)> {
+    let ctx = ndk_context::android_context();
+    // SAFETY: ndk-context hands out the process's `JavaVM`.
+    let java_vm = unsafe { JavaVM::from_raw(ctx.vm().cast())? };
+    let env = java_vm.attach_current_thread()?;
+    let vm = Arc::new(env.get_java_vm()?);
+    // SAFETY: ndk-context holds this reference, and `new_global_ref` below takes our own.
+    let context = unsafe { JObject::from_raw(ctx.context().cast()) };
+    let context = env.new_global_ref(context)?;
+    Ok((vm, context))
 }
