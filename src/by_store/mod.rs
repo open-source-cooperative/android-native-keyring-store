@@ -33,6 +33,9 @@ Accessing a store's SharedPreference file directly is not recommended. To avoid
 interactions with third-party software that might do so, store operations are careful to
 ignore entries that don't look like they are credential IDs.
 
+Creating a store whose file holds credentials but whose Keystore key is gone fails with
+[BadStoreFormat](keyring_core::Error::BadStoreFormat), and deleting it removes the file.
+
 ## Ambiguity
 
 Stores do not allow either user or service names to contain the
@@ -54,6 +57,13 @@ Searches do not return entries in the SharedPreferences file
 that don't conform to the credential naming conventions. These can
 only have been added by third parties, so they are assumed
 not to be valid credentials.
+
+## User Authentication
+
+With `user-auth-required` set to `true`, a store opens for `user-auth-timeout` seconds after the
+user authenticates with a strong biometric or the device credential, and otherwise fails with
+[NoStorageAccess](keyring_core::Error::NoStorageAccess). It needs a non-default `name`,
+Android 11 and a secure lock screen, whose removal destroys its key.
  */
 mod vault;
 #[cfg(feature = "compile-tests")]

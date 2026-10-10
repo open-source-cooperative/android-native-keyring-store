@@ -18,6 +18,7 @@ crate-type = ["lib", "cdylib"]
 [features]
 legacy = []
 compile-tests = ["android_log-sys"]
+user-auth-tests = ["compile-tests"]
 android-log = ["android_log-sys", "tracing-subscriber/env-filter"]
 
 [dependencies]

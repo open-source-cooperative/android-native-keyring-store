@@ -6,6 +6,8 @@ pub enum AndroidKeyringError {
     JavaExceptionThrow,
     #[error("{1}")]
     CorruptedData(Vec<u8>, CorruptedData),
+    #[error("User authentication required but not provided")]
+    UserNotAuthenticated,
     #[error(transparent)]
     KeyringError(#[from] keyring_core::Error),
 }
@@ -21,6 +23,9 @@ impl From<AndroidKeyringError> for keyring_core::Error {
             }
             AndroidKeyringError::CorruptedData(data, error) => {
                 keyring_core::Error::BadDataFormat(data, Box::new(error))
+            }
+            e @ AndroidKeyringError::UserNotAuthenticated => {
+                keyring_core::Error::NoStorageAccess(Box::new(e))
             }
             AndroidKeyringError::KeyringError(error) => error,
         }
