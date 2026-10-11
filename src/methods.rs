@@ -90,7 +90,7 @@ impl SignatureComp {
 #[derive(Clone, Copy)]
 pub struct ClassDecl(pub &'static str);
 impl ClassDecl {
-    fn for_finding(self) -> &'static str {
+    pub fn for_finding(self) -> &'static str {
         if !self.0.is_empty() && &self.0[0..1] == "[" {
             return self.0;
         }

@@ -16,6 +16,8 @@ pub const KEY_ALGORITHM_AES: &str = "AES";
 pub const PROVIDER: &str = "AndroidKeyStore";
 pub const PURPOSE_ENCRYPT: i32 = 1;
 pub const PURPOSE_DECRYPT: i32 = 2;
+pub const AUTH_DEVICE_CREDENTIAL: i32 = 1;
+pub const AUTH_BIOMETRIC_STRONG: i32 = 2;
 
 pub struct KeyStore {
     self_: GlobalRef,
@@ -298,6 +300,24 @@ impl KeyGenParameterSpecBuilder {
         }
 
         ThisMethod::call(&self.self_, env, required)
+    }
+
+    /// Requires API 30.
+    pub fn set_user_authentication_parameters(
+        &self,
+        env: &mut JNIEnv,
+        timeout_seconds: i32,
+        auth_type: i32,
+    ) -> JResult<KeyGenParameterSpecBuilder> {
+        struct ThisMethod;
+        impl Method for ThisMethod {
+            type Param = (i32, i32);
+            type Return = KeyGenParameterSpecBuilder;
+
+            const NAME: &str = "setUserAuthenticationParameters";
+        }
+
+        ThisMethod::call(&self.self_, env, (timeout_seconds, auth_type))
     }
 
     pub fn build(&self, env: &mut JNIEnv) -> JResult<KeyGenParameterSpec> {

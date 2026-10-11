@@ -66,6 +66,7 @@ mod keystore;
 mod logcat;
 mod methods;
 mod shared_preferences;
+mod throwable;
 
 #[cfg(feature = "compile-tests")]
 pub mod tests;
