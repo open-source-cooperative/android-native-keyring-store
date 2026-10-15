@@ -69,8 +69,10 @@ mod vault;
 #[cfg(feature = "compile-tests")]
 pub use vault::clear_vault_list;
 
+/// The named store's [`Store`] type and its `StoreConfig`.
 pub mod store;
 pub use store::Store;
 
+/// The named store's [`Cred`] credential type.
 pub mod cred;
 pub use cred::Cred;

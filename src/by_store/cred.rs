@@ -16,7 +16,9 @@ use super::vault::AtomicVault;
 /// are serialized and never interfere with one another.
 pub struct Cred {
     vault: AtomicVault,
+    /// The credential's ID, its user and service joined by the store's divider.
     pub id: String,
+    /// The credential's service and user names.
     pub specifiers: (String, String),
 }
 
