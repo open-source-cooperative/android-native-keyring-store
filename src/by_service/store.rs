@@ -7,6 +7,7 @@ use crate::{error::AndroidKeyringResult, shared_preferences::Context};
 
 use super::{Cred, HasJavaVm};
 
+/// The deprecated legacy store, with one SharedPreferences file and Keystore key per service.
 pub struct Store {
     java_vm: Arc<JavaVM>,
     context: Context,

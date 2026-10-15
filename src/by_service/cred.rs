@@ -16,6 +16,7 @@ use crate::{
 
 use super::HasJavaVm;
 
+/// A credential of the legacy store, kept in a SharedPreferences file named after its service.
 pub struct Cred {
     java_vm: Arc<JavaVM>,
     context: Context,
@@ -33,6 +34,7 @@ impl std::fmt::Debug for Cred {
 }
 
 impl Cred {
+    /// Create a legacy credential for a service and user.
     pub fn new(java_vm: Arc<JavaVM>, context: Context, service: &str, user: &str) -> Self {
         Self {
             java_vm,
