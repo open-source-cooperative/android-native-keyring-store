@@ -10,8 +10,12 @@ permissions:
 jobs:
   ci:
     uses: $/.github/workflows/ci.yml
+  semver:
+    uses: $/.github/workflows/semver.yml
+  docs:
+    uses: $/.github/workflows/docs.yml
   publish:
-    needs: ci
+    needs: [ci, semver, docs]
     runs-on: ubuntu-latest
     environment: release
     permissions:
