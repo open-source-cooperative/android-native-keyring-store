@@ -14,11 +14,11 @@ use super::vault::{AtomicVault, delete, exists, lookup};
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct StoreConfig {
-    /// The store name, `default` unless the `name` key sets one.
+    /// The store name.
     pub name: String,
-    /// The SharedPreferences file name, `keyring-{name}` unless the `filename` key sets one.
+    /// The SharedPreferences file name.
     pub filename: String,
-    /// The divider between user and service in a credential ID, `\u{feff}@\u{feff}` unless the `divider` key sets one.
+    /// The divider between user and service in a credential ID.
     pub divider: String,
     /// Seconds that one user authentication opens the store's key for, if it needs one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -118,7 +118,7 @@ impl StoreConfig {
 /// A Store is a wrapper around a Vault
 /// that keeps its configuration handy.
 pub struct Store {
-    /// The store identifier, built from the crate version and the creation time.
+    /// The unique ID for this store instance.
     pub id: String,
     /// The configuration this store was created with.
     pub config: StoreConfig,
