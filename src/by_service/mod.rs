@@ -45,9 +45,11 @@ fn main() -> keyring_core::Result<()> {
 
  */
 
+/// The legacy [`Store`].
 pub mod store;
 pub use store::Store;
 
+/// The legacy [`Cred`] credential type.
 pub mod cred;
 use crate::error::{AndroidKeyringError, AndroidKeyringResult};
 pub use cred::Cred;
