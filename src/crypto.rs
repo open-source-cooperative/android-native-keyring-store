@@ -11,7 +11,7 @@ const DECRYPT_MODE: i32 = 2;
 const CIPHER_TRANSFORMATION: &str = "AES/GCM/NoPadding";
 const IV_LEN: usize = 12;
 
-pub fn encrypt(env: &mut JNIEnv, key: Key, data: &[u8]) -> AndroidKeyringResult<Vec<u8>> {
+pub(crate) fn encrypt(env: &mut JNIEnv, key: Key, data: &[u8]) -> AndroidKeyringResult<Vec<u8>> {
     let cipher = Cipher::get_instance(env, CIPHER_TRANSFORMATION)?;
     cipher.init(env, ENCRYPT_MODE, &key)?;
     let iv = cipher.get_iv(env)?;
@@ -24,7 +24,7 @@ pub fn encrypt(env: &mut JNIEnv, key: Key, data: &[u8]) -> AndroidKeyringResult<
     Ok(value)
 }
 
-pub fn decrypt(env: &mut JNIEnv, key: Key, data: Vec<u8>) -> AndroidKeyringResult<Vec<u8>> {
+pub(crate) fn decrypt(env: &mut JNIEnv, key: Key, data: Vec<u8>) -> AndroidKeyringResult<Vec<u8>> {
     if data.is_empty() {
         let err = CorruptedData::MissingIvLen;
         return Err(AndroidKeyringError::CorruptedData(data, err));
