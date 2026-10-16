@@ -35,6 +35,9 @@ thiserror = "2"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", optional = true }
 
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(keyring_coverage)"] }
+
 [lints.clippy]
 undocumented_unsafe_blocks = "deny"
 
