@@ -32,7 +32,7 @@ impl From<AndroidKeyringError> for keyring_core::Error {
     }
 }
 
-pub type AndroidKeyringResult<T> = Result<T, AndroidKeyringError>;
+pub(crate) type AndroidKeyringResult<T> = Result<T, AndroidKeyringError>;
 
 #[derive(thiserror::Error, Debug)]
 pub enum CorruptedData {
