@@ -51,6 +51,28 @@ pub extern "system" fn Java_io_crates_keyring_KeyringTests_00024Companion_runAll
             );
         }
     }
+    #[cfg(keyring_coverage)]
+    write_coverage_profile();
+}
+
+/// Writes the coverage profile, since Android kills the app before the runtime would.
+#[cfg(keyring_coverage)]
+fn write_coverage_profile() {
+    unsafe extern "C" {
+        fn __llvm_profile_write_file() -> std::ffi::c_int;
+    }
+    // SAFETY: `-C instrument-coverage` links the runtime defining this no-argument function,
+    // and no test is still running to update the counters it reads.
+    let status = unsafe { __llvm_profile_write_file() };
+    let priority = if status == 0 {
+        LogPriority::INFO
+    } else {
+        LogPriority::ERROR
+    };
+    report(
+        priority,
+        &format!("Coverage profile written with status {status}"),
+    );
 }
 
 /// Logs `message` under the `unit-test` tag.

@@ -1,5 +1,7 @@
 # Keyring-compatible Android Store
 
+[![build](https://github.com/open-source-cooperative/android-native-keyring-store/actions/workflows/ci.yml/badge.svg)](https://github.com/open-source-cooperative/android-native-keyring-store/actions) [![crates.io](https://img.shields.io/crates/v/android-native-keyring-store.svg)](https://crates.io/crates/android-native-keyring-store) [![docs.rs](https://docs.rs/android-native-keyring-store/badge.svg)](https://docs.rs/android-native-keyring-store) [![codecov](https://codecov.io/gh/open-source-cooperative/android-native-keyring-store/graph/badge.svg)](https://codecov.io/gh/open-source-cooperative/android-native-keyring-store)
+
 This crate provides storage and management of Keyring credentials in Android's native `SharedPreferences` store, securing all passwords and secrets using encryption via credentials in Android’s native Keystore. Once this library has been loaded and initialized (as described below) by your Android-native application, other Rust code linked into your application can use this credential store.
 
 ## Usage

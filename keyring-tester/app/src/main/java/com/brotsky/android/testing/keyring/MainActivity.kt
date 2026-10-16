@@ -1,6 +1,7 @@
 package com.brotsky.android.testing.keyring
 
 import android.os.Bundle
+import android.system.Os
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
@@ -12,6 +13,8 @@ import io.crates.keyring.KeyringTests
 class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Read by a coverage build of the library when it loads.
+        Os.setenv("LLVM_PROFILE_FILE", "$filesDir/keyring.profraw", true)
         Keyring.initializeNdkContext(applicationContext)
         enableEdgeToEdge()
         setContentView(R.layout.start_tests)
