@@ -6,7 +6,9 @@ This crate provides storage and management of Keyring credentials in Android's n
 
 ## Usage
 
-As usual for Keyring credential stores, you create a credential store by invoking `Store::new` (or `Store::new_with_configuration`). In order for this to work, however, your application must first have initialized the `application_context` object provided by the [ndk-context crate](https://crates.io/crates/ndk-context) and also loaded this library.
+For a background callback, create an `AndroidContext` with JNI 0.21's `AndroidContext::new(&mut env, &context)` and pass it by value to `Store::new_with_context(context, config)`. Use `context.clone()` when deliberately sharing ownership, and borrow `&context` for `Store::exists_with_context` and `Store::delete_with_context`. The store retains the application context and preserves credential/device-protected storage without accessing `ndk-context`.
+
+`Store::new` and `Store::new_with_configuration` require the framework or application to initialize the `application_context` object provided by [ndk-context](https://crates.io/crates/ndk-context).
 
 A number of Android/Rust application frameworks, such as Dioxus Mobile, Tauri Mobile and the [android-activity crate](https://crates.io/crates/android-activity), already provide this initialization for you. If your framework does not, then this crate also provides an initialization function that you can invoke at your application's startup. To do this, you add a Kotlin class `io.crates.keyring.Keyring` to your main application with the following content:
 

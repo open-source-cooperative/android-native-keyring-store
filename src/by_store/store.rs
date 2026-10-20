@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use super::Cred;
 use super::vault::{AtomicVault, delete, exists, lookup};
+use crate::AndroidContext;
 
 /// The configurable parts of a Store.
 ///
@@ -150,11 +151,9 @@ impl Store {
     /// and `user-auth-timeout`. None are required, but any that are supplied must be non-empty,
     /// and `user-auth-required` must be `true` or `false`.
     ///
-    /// The value of `name` defaults to `default`. Stores names are unique, so you can't
-    /// create two stores with the same name (even if they use different configurations).
+    /// The `name` defaults to `default` and must have one configuration within its application storage domain.
     ///
-    /// The value of `filename` defaults to `keyring-{name}`. Store filenames are unique,
-    /// so you can't create two differently named stores with the same filename.
+    /// The `filename` defaults to `keyring-{name}` and must identify one store across the application's storage domains.
     ///
     /// The value of `divider` defaults to `\u{feff}@\u{feff}` which,
     /// when printed as part of a string, looks like `@` because
@@ -171,7 +170,12 @@ impl Store {
     /// Returns a store with the specified [StoreConfig],
     /// creating one if necessary.
     pub fn new_with_store_config(config: StoreConfig) -> Result<Arc<Self>> {
-        let vault = lookup(&config)?;
+        Self::new_with_context(crate::android_context()?, config)
+    }
+
+    /// Opens a named store, taking ownership of its application context without using `ndk-context`.
+    pub fn new_with_context(context: AndroidContext, config: StoreConfig) -> Result<Arc<Self>> {
+        let vault = lookup(context, &config)?;
         let id = generate_instance_id();
         Ok(Arc::new(Store { id, config, vault }))
     }
@@ -190,7 +194,16 @@ impl Store {
     /// credentials with no vault to back them.
     pub fn delete(configuration: &HashMap<&str, &str>) -> Result<bool> {
         let config = StoreConfig::from_configuration(configuration)?;
-        delete(&config)
+        delete(&crate::android_context()?, &config)
+    }
+
+    /// Deletes an unused named store in the supplied application storage domain.
+    pub fn delete_with_context(
+        context: &AndroidContext,
+        configuration: &HashMap<&str, &str>,
+    ) -> Result<bool> {
+        let config = StoreConfig::from_configuration(configuration)?;
+        delete(context, &config)
     }
 
     /// Reports whether a store with the specified configuration exists, without creating it or
@@ -206,7 +219,16 @@ impl Store {
     /// configuration.
     pub fn exists(configuration: &HashMap<&str, &str>) -> Result<bool> {
         let config = StoreConfig::from_configuration(configuration)?;
-        exists(&config)
+        exists(&crate::android_context()?, &config)
+    }
+
+    /// Reports whether a named store exists in the supplied application storage domain.
+    pub fn exists_with_context(
+        context: &AndroidContext,
+        configuration: &HashMap<&str, &str>,
+    ) -> Result<bool> {
+        let config = StoreConfig::from_configuration(configuration)?;
+        exists(context, &config)
     }
 
     #[cfg(feature = "compile-tests")]
