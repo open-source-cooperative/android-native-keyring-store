@@ -41,7 +41,7 @@ jobs:
       - name: Build the library for the emulator
         run: |
           export CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER="$ANDROID_HOME/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android21-clang"
-          cargo build --release --target x86_64-linux-android --features legacy,compile-tests,android-log
+          cargo build --release --target x86_64-linux-android --features compile-tests,android-log
           mkdir -p keyring-tester/app/src/main/jniLibs/x86_64
           cp target/x86_64-linux-android/release/libandroid_native_keyring_store.so keyring-tester/app/src/main/jniLibs/x86_64/
       - name: Build keyring-tester
