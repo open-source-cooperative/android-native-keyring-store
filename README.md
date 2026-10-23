@@ -97,11 +97,7 @@ The second is the `Keyring Demo` [Tauri 2.0](https://v2.tauri.app) application w
 
 ## Upgrading from v0.5.x or earlier
 
-Starting with release v0.6.0 of this crate, the storage conventions for credentials have changed. If your application has stored credentials using an earlier version of this crate, you can still access those credentials by using the function `LegacyStore::from_ndk_context`  to create your credential store (rather then `Store::new` as you did before).
-
-However! In order to get access to the `LegacyStore` implementation, you will need to compile this crate with the `legacy` feature enabled, and you are strongly encouraged not to keep using the legacy implementation as it is deprecated and may be removed in future versions. Instead, your application should use the default store based on the current implementation (or create a named store of its own to use), and it should migrate any needed credentials from the legacy store to the current one.
-
-See the crate docs for more about this.
+Versions 0.5 and earlier stored credentials in one SharedPreferences file and Keystore entry per service. This version no longer reads that layout. If your application still has such credentials, migrate them to a named store with a 1.x release of this crate, as its [migration guide](https://docs.rs/android-native-keyring-store/1.0.0/android_native_keyring_store/by_service/index.html#migration-guide) describes, before upgrading.
 
 ## Changelog
 
