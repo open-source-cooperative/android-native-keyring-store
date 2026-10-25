@@ -21,12 +21,20 @@ const DEVICE_CONFIG: [(&str, &str); 1] = [("name", "explicit-device-test")];
 
 #[allow(non_snake_case)]
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_io_crates_keyring_KeyringTests_00024Companion_runContextTests(
+pub extern "system" fn Java_io_crates_keyring_KeyringTests_00024Companion_runContextTestsWithInvalidContexts(
     mut env: JNIEnv,
     _class: JObject,
     context: JObject,
+    missing_application: JObject,
+    mismatched_storage: JObject,
 ) -> jboolean {
-    match catch_unwind(AssertUnwindSafe(|| before_activity(&mut env, &context))) {
+    match catch_unwind(AssertUnwindSafe(|| {
+        before_activity(
+            &mut env,
+            &context,
+            [&missing_application, &mismatched_storage],
+        )
+    })) {
         Ok(Ok(())) => true.into(),
         failure => {
             super::report(
@@ -49,7 +57,11 @@ fn credential(store: &Arc<Store>) -> Result<Entry> {
     store.build("notification", "callback", None)
 }
 
-fn before_activity(env: &mut JNIEnv, context: &JObject) -> AndroidKeyringResult<()> {
+fn before_activity(
+    env: &mut JNIEnv,
+    context: &JObject,
+    invalid_contexts: [&JObject; 2],
+) -> AndroidKeyringResult<()> {
     assert!(
         matches!(AndroidContext::new(env, &JObject::null()), Err(Error::Invalid(key, _)) if key == "context")
     );
@@ -86,6 +98,16 @@ fn before_activity(env: &mut JNIEnv, context: &JObject) -> AndroidKeyringResult<
     Store::delete_with_context(&device, &device_configuration)?;
     assert!(!Store::exists_with_context(&android, &configuration)?);
     assert!(!Store::delete_with_context(&android, &configuration)?);
+    for invalid in invalid_contexts {
+        assert!(
+            matches!(AndroidContext::new(env, invalid), Err(Error::Invalid(key, _)) if key == "context")
+        );
+        assert!(!env.exception_check()?);
+        let recovered = store(AndroidContext::new(env, context)?)?;
+        let entry = credential(&recovered)?;
+        entry.set_password("callback-key")?;
+        assert_eq!(entry.get_password()?, "callback-key");
+    }
     {
         let retained = android.clone();
         let (sender, receiver) = mpsc::channel();
