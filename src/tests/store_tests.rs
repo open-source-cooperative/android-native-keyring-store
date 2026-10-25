@@ -12,10 +12,14 @@ pub fn run_tests() -> (usize, usize) {
         ("delete_credential", delete_credential),
         ("concurrent_access", concurrent_access),
         ("search", search),
+        ("entry_validation", entry_validation),
+        ("existing_credential", existing_credential),
         ("teardown", teardown),
         ("user_auth_timeout", user_auth_timeout),
         ("lost_key", lost_key),
         ("exists", exists),
+        ("configuration_mismatch", configuration_mismatch),
+        ("default_store", default_store),
     ]
     .iter()
     // user_auth_timeout needs a secure lock screen and a device unlocked in the last 300 seconds.
@@ -221,6 +225,40 @@ fn search() -> keyring_core::Result<()> {
     Ok(())
 }
 
+fn entry_validation() -> keyring_core::Result<()> {
+    for (service, user, key) in [("a@b", "user", "service"), ("service", "u@x", "user")] {
+        match Entry::new(service, user) {
+            Err(keyring_core::Error::Invalid(k, _)) if k == key => {}
+            r => return bad_result("new", &format!("Invalid({key}), got {r:?}")),
+        }
+    }
+    let modifiers = HashMap::from([("color", "blue")]);
+    match Entry::new_with_modifiers("service", "user", &modifiers) {
+        Err(keyring_core::Error::NotSupportedByStore(_)) => {}
+        r => return bad_result("new_with_modifiers", &format!("NotSupported, got {r:?}")),
+    }
+    for key in ["id", "service", "user"] {
+        match Entry::search(&HashMap::from([(key, "(")])) {
+            Err(keyring_core::Error::Invalid(k, _)) if k == key => {}
+            r => return bad_result("search", &format!("Invalid({key}), got {r:?}")),
+        }
+    }
+    match Entry::new("my-service", "never-set")?.delete_credential() {
+        Err(keyring_core::Error::NoEntry) => Ok(()),
+        r => bad_result("delete_credential", &format!("NoEntry, got {r:?}")),
+    }
+}
+
+fn existing_credential() -> keyring_core::Result<()> {
+    let entry = Entry::new("my-service", "existing-test")?;
+    entry.set_password("existing")?;
+    match entry.get_credential()?.get_password() {
+        Ok(p) if p == "existing" => {}
+        r => return bad_result("get_credential", &format!("'existing', got {r:?}")),
+    }
+    entry.delete_credential()
+}
+
 const AUTH_OPEN_CONFIG: [(&str, &str); 4] = [
     ("name", "auth-open-test"),
     ("divider", "@"),
@@ -345,5 +383,71 @@ fn exists() -> keyring_core::Result<()> {
     crate::Store::new_with_configuration(&config)?;
     crate::by_store::clear_vault_list();
     crate::Store::delete(&config)?;
+    Ok(())
+}
+
+const MISMATCH_CONFIG: [(&str, &str); 2] = [("name", "mismatch-test"), ("divider", "@")];
+
+fn configuration_mismatch() -> keyring_core::Result<()> {
+    let config = HashMap::from(MISMATCH_CONFIG);
+    crate::Store::delete(&config)?;
+    let expect_invalid = |attempt: &[(&str, &str)], expected: &str| -> keyring_core::Result<()> {
+        let attempt = attempt.iter().copied().collect::<HashMap<_, _>>();
+        match crate::Store::new_with_configuration(&attempt) {
+            Err(keyring_core::Error::Invalid(key, _)) if key == expected => Ok(()),
+            r => bad_result(
+                "new_with_configuration",
+                &format!("Invalid({expected}), got {r:?}"),
+            ),
+        }
+    };
+    let store = crate::Store::new_with_configuration(&config)?;
+    expect_invalid(
+        &[
+            ("name", "mismatch-test"),
+            ("filename", "keyring-other"),
+            ("divider", "@"),
+        ],
+        "filename",
+    )?;
+    expect_invalid(
+        &[
+            ("name", "mismatch-test"),
+            ("divider", "@"),
+            ("user-auth-required", "true"),
+            ("user-auth-timeout", "30"),
+        ],
+        "user-auth-timeout",
+    )?;
+    drop(store);
+    crate::by_store::clear_vault_list();
+    expect_invalid(
+        &[
+            ("name", "other-name"),
+            ("filename", "keyring-mismatch-test"),
+            ("divider", "@"),
+        ],
+        "name",
+    )?;
+    crate::Store::delete(&config)?;
+    Ok(())
+}
+
+fn default_store() -> keyring_core::Result<()> {
+    let default = HashMap::new();
+    crate::Store::delete(&default)?;
+    let store = crate::Store::new()?;
+    let entry = store.build("default-service", "default-user", None)?;
+    entry.set_password("default")?;
+    match entry.get_password() {
+        Ok(p) if p == "default" => {}
+        r => return bad_result("get_password", &format!("'default', got {r:?}")),
+    }
+    drop(entry);
+    drop(store);
+    crate::by_store::clear_vault_list();
+    if !crate::Store::delete(&default)? {
+        return bad_result("delete", "true for the default store");
+    }
     Ok(())
 }

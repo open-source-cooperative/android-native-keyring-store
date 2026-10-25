@@ -9,6 +9,7 @@ pub fn run_tests() -> (usize, usize) {
         ("setup", setup as fn() -> keyring_core::Result<()>),
         ("golden_path", golden_path),
         ("delete_credential", delete_credential),
+        ("existing_credential", existing_credential),
         ("concurrent_access", concurrent_access),
         ("teardown", teardown),
     ]
@@ -88,6 +89,9 @@ fn cleanup() -> keyring_core::Result<()> {
     // concurrent_access:
     let entry1 = Entry::new("concurrent", "user")?;
     _ = entry1.delete_credential();
+    // existing_credential:
+    let entry1 = Entry::new("my-service", "existing-test")?;
+    _ = entry1.delete_credential();
     Ok(())
 }
 
@@ -140,6 +144,20 @@ fn delete_credential() -> keyring_core::Result<()> {
         Err(keyring_core::Error::NoEntry) => Ok(()),
         Err(e) => bad_result("get_credential", &format!("NoEntry, but got {e:?}")),
     }
+}
+
+fn existing_credential() -> keyring_core::Result<()> {
+    let entry = Entry::new("my-service", "existing-test")?;
+    entry.set_password("existing")?;
+    match entry.get_credential()?.get_password() {
+        Ok(p) if p == "existing" => {}
+        r => return bad_result("get_credential", &format!("'existing', got {r:?}")),
+    }
+    let expected = Some(("my-service".to_string(), "existing-test".to_string()));
+    if entry.get_specifiers() != expected {
+        return bad_result("get_specifiers", &format!("{expected:?}"));
+    }
+    entry.delete_credential()
 }
 
 fn concurrent_access() -> keyring_core::Result<()> {
