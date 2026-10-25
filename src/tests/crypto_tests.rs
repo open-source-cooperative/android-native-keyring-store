@@ -20,6 +20,7 @@ pub fn run_tests(env: JNIEnv, context: Context) -> (usize, usize) {
         ("missing_iv_len", missing_iv_len),
         ("data_too_small", data_too_small),
         ("invalid_iv", invalid_iv),
+        ("malformed_base64", malformed_base64),
         ("decryption_failure", decryption_failure),
         ("teardown", teardown),
     ]
@@ -199,6 +200,35 @@ fn invalid_iv(vm: JavaVM, ctx: Context) -> keyring_core::Result<()> {
         x => return bad_result("invalid_iv", &format!("CorruptedData, got {x:?}")),
     }
     entry1.delete_credential()?;
+    Ok(())
+}
+
+fn malformed_base64(vm: JavaVM, ctx: Context) -> keyring_core::Result<()> {
+    let entry = Entry::new("malformed-base64", "user")?;
+    entry.set_password("test")?;
+    const MALFORMED: &str = "not base64!!!";
+    {
+        let mut env = vm.attach_current_thread().unwrap();
+        let shared = ctx
+            .get_shared_preferences(&mut env, "crypto-test", MODE_PRIVATE)
+            .unwrap();
+        let editor = shared.edit(&mut env).unwrap();
+        editor
+            .put_string(&mut env, "user@malformed-base64", MALFORMED)
+            .unwrap();
+        editor.commit(&mut env).unwrap();
+    }
+    match entry.get_password() {
+        Err(keyring_core::Error::NoEntry) => {}
+        x => return bad_result("malformed_base64", &format!("NoEntry, got {x:?}")),
+    }
+    entry.set_password("recovered")?;
+    match entry.get_password() {
+        Ok(p) if p.eq("recovered") => {}
+        Ok(p) => return bad_result("get_password", &format!("'recovered', got '{p}'")),
+        Err(e) => return bad_result("get_password", &format!("'recovered', got {e:?}")),
+    }
+    entry.delete_credential()?;
     Ok(())
 }
 
