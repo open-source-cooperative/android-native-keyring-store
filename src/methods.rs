@@ -2,7 +2,7 @@
 
 use jni::{
     JNIEnv,
-    objects::{GlobalRef, JByteArray, JObject, JValue, JValueGen},
+    objects::{GlobalRef, JByteArray, JObject, JValue, JValueGen, JValueOwned},
     signature::{Primitive, ReturnType},
 };
 
@@ -114,21 +114,7 @@ pub trait Method {
             let param = borrow_params(&param);
             let r = env.call_method(self_, Self::NAME, &signature, param.as_slice())?;
 
-            match r {
-                JValueGen::Object(obj) if obj.is_null() => Ok(FromValue::from_null()?),
-                JValueGen::Object(obj) => {
-                    Ok(FromValue::from_object(env.new_global_ref(obj)?, env)?)
-                }
-                JValueGen::Byte(value) => Ok(FromValue::from_value(JValueGen::Byte(value))?),
-                JValueGen::Char(value) => Ok(FromValue::from_value(JValueGen::Char(value))?),
-                JValueGen::Short(value) => Ok(FromValue::from_value(JValueGen::Short(value))?),
-                JValueGen::Int(value) => Ok(FromValue::from_value(JValueGen::Int(value))?),
-                JValueGen::Long(value) => Ok(FromValue::from_value(JValueGen::Long(value))?),
-                JValueGen::Bool(value) => Ok(FromValue::from_value(JValueGen::Bool(value))?),
-                JValueGen::Float(value) => Ok(FromValue::from_value(JValueGen::Float(value))?),
-                JValueGen::Double(value) => Ok(FromValue::from_value(JValueGen::Double(value))?),
-                JValueGen::Void => Ok(FromValue::from_value(JValueGen::Void)?),
-            }
+            Self::Return::from_return(r, env)
         })
     }
 }
@@ -151,21 +137,7 @@ pub trait StaticMethod {
                 param.as_slice(),
             )?;
 
-            match r {
-                JValueGen::Object(obj) if obj.is_null() => Ok(FromValue::from_null()?),
-                JValueGen::Object(obj) => {
-                    Ok(FromValue::from_object(env.new_global_ref(obj)?, env)?)
-                }
-                JValueGen::Byte(value) => Ok(FromValue::from_value(JValueGen::Byte(value))?),
-                JValueGen::Char(value) => Ok(FromValue::from_value(JValueGen::Char(value))?),
-                JValueGen::Short(value) => Ok(FromValue::from_value(JValueGen::Short(value))?),
-                JValueGen::Int(value) => Ok(FromValue::from_value(JValueGen::Int(value))?),
-                JValueGen::Long(value) => Ok(FromValue::from_value(JValueGen::Long(value))?),
-                JValueGen::Bool(value) => Ok(FromValue::from_value(JValueGen::Bool(value))?),
-                JValueGen::Float(value) => Ok(FromValue::from_value(JValueGen::Float(value))?),
-                JValueGen::Double(value) => Ok(FromValue::from_value(JValueGen::Double(value))?),
-                JValueGen::Void => Ok(FromValue::from_value(JValueGen::Void)?),
-            }
+            Self::Return::from_return(r, env)
         })
     }
 }
@@ -343,6 +315,14 @@ impl ToValue for bool {
 
 pub trait FromValue: Sized {
     fn signature() -> SignatureComp;
+
+    fn from_return(value: JValueOwned, env: &mut JNIEnv) -> JResult<Self> {
+        match value {
+            JValueGen::Object(value) if value.is_null() => Self::from_null(),
+            JValueGen::Object(value) => Self::from_object(env.new_global_ref(value)?, env),
+            value => Self::from_value(value.borrow()),
+        }
+    }
 
     fn from_object(value: GlobalRef, env: &mut JNIEnv) -> JResult<Self> {
         let _ = (value, env);
