@@ -1,3 +1,5 @@
+//! Object results are owned before each local reference frame is released.
+
 use jni::{
     JNIEnv,
     objects::{GlobalRef, JByteArray, JObject, JValue, JValueGen},
@@ -106,24 +108,28 @@ pub trait Method {
     const NAME: &str;
 
     fn call(self_: &JObject, env: &mut JNIEnv, params: Self::Param) -> JResult<Self::Return> {
-        let signature = make_signature(&Self::Param::signature(), Self::Return::signature());
-        let param = params.as_param(env)?;
-        let param = borrow_params(&param);
-        let r = env.call_method(self_, Self::NAME, &signature, param.as_slice())?;
+        env.with_local_frame(16, |env| {
+            let signature = make_signature(&Self::Param::signature(), Self::Return::signature());
+            let param = params.as_param(env)?;
+            let param = borrow_params(&param);
+            let r = env.call_method(self_, Self::NAME, &signature, param.as_slice())?;
 
-        match r {
-            JValueGen::Object(obj) if obj.is_null() => Ok(FromValue::from_null()?),
-            JValueGen::Object(obj) => Ok(FromValue::from_object(env.new_global_ref(obj)?, env)?),
-            JValueGen::Byte(value) => Ok(FromValue::from_value(JValueGen::Byte(value))?),
-            JValueGen::Char(value) => Ok(FromValue::from_value(JValueGen::Char(value))?),
-            JValueGen::Short(value) => Ok(FromValue::from_value(JValueGen::Short(value))?),
-            JValueGen::Int(value) => Ok(FromValue::from_value(JValueGen::Int(value))?),
-            JValueGen::Long(value) => Ok(FromValue::from_value(JValueGen::Long(value))?),
-            JValueGen::Bool(value) => Ok(FromValue::from_value(JValueGen::Bool(value))?),
-            JValueGen::Float(value) => Ok(FromValue::from_value(JValueGen::Float(value))?),
-            JValueGen::Double(value) => Ok(FromValue::from_value(JValueGen::Double(value))?),
-            JValueGen::Void => Ok(FromValue::from_value(JValueGen::Void)?),
-        }
+            match r {
+                JValueGen::Object(obj) if obj.is_null() => Ok(FromValue::from_null()?),
+                JValueGen::Object(obj) => {
+                    Ok(FromValue::from_object(env.new_global_ref(obj)?, env)?)
+                }
+                JValueGen::Byte(value) => Ok(FromValue::from_value(JValueGen::Byte(value))?),
+                JValueGen::Char(value) => Ok(FromValue::from_value(JValueGen::Char(value))?),
+                JValueGen::Short(value) => Ok(FromValue::from_value(JValueGen::Short(value))?),
+                JValueGen::Int(value) => Ok(FromValue::from_value(JValueGen::Int(value))?),
+                JValueGen::Long(value) => Ok(FromValue::from_value(JValueGen::Long(value))?),
+                JValueGen::Bool(value) => Ok(FromValue::from_value(JValueGen::Bool(value))?),
+                JValueGen::Float(value) => Ok(FromValue::from_value(JValueGen::Float(value))?),
+                JValueGen::Double(value) => Ok(FromValue::from_value(JValueGen::Double(value))?),
+                JValueGen::Void => Ok(FromValue::from_value(JValueGen::Void)?),
+            }
+        })
     }
 }
 
@@ -134,29 +140,33 @@ pub trait StaticMethod {
     const NAME: &str;
 
     fn call(self_: ClassDecl, env: &mut JNIEnv, params: Self::Param) -> JResult<Self::Return> {
-        let signature = make_signature(&Self::Param::signature(), Self::Return::signature());
-        let param = params.as_param(env)?;
-        let param = borrow_params(&param);
-        let r = env.call_static_method(
-            self_.for_finding(),
-            Self::NAME,
-            &signature,
-            param.as_slice(),
-        )?;
+        env.with_local_frame(16, |env| {
+            let signature = make_signature(&Self::Param::signature(), Self::Return::signature());
+            let param = params.as_param(env)?;
+            let param = borrow_params(&param);
+            let r = env.call_static_method(
+                self_.for_finding(),
+                Self::NAME,
+                &signature,
+                param.as_slice(),
+            )?;
 
-        match r {
-            JValueGen::Object(obj) if obj.is_null() => Ok(FromValue::from_null()?),
-            JValueGen::Object(obj) => Ok(FromValue::from_object(env.new_global_ref(obj)?, env)?),
-            JValueGen::Byte(value) => Ok(FromValue::from_value(JValueGen::Byte(value))?),
-            JValueGen::Char(value) => Ok(FromValue::from_value(JValueGen::Char(value))?),
-            JValueGen::Short(value) => Ok(FromValue::from_value(JValueGen::Short(value))?),
-            JValueGen::Int(value) => Ok(FromValue::from_value(JValueGen::Int(value))?),
-            JValueGen::Long(value) => Ok(FromValue::from_value(JValueGen::Long(value))?),
-            JValueGen::Bool(value) => Ok(FromValue::from_value(JValueGen::Bool(value))?),
-            JValueGen::Float(value) => Ok(FromValue::from_value(JValueGen::Float(value))?),
-            JValueGen::Double(value) => Ok(FromValue::from_value(JValueGen::Double(value))?),
-            JValueGen::Void => Ok(FromValue::from_value(JValueGen::Void)?),
-        }
+            match r {
+                JValueGen::Object(obj) if obj.is_null() => Ok(FromValue::from_null()?),
+                JValueGen::Object(obj) => {
+                    Ok(FromValue::from_object(env.new_global_ref(obj)?, env)?)
+                }
+                JValueGen::Byte(value) => Ok(FromValue::from_value(JValueGen::Byte(value))?),
+                JValueGen::Char(value) => Ok(FromValue::from_value(JValueGen::Char(value))?),
+                JValueGen::Short(value) => Ok(FromValue::from_value(JValueGen::Short(value))?),
+                JValueGen::Int(value) => Ok(FromValue::from_value(JValueGen::Int(value))?),
+                JValueGen::Long(value) => Ok(FromValue::from_value(JValueGen::Long(value))?),
+                JValueGen::Bool(value) => Ok(FromValue::from_value(JValueGen::Bool(value))?),
+                JValueGen::Float(value) => Ok(FromValue::from_value(JValueGen::Float(value))?),
+                JValueGen::Double(value) => Ok(FromValue::from_value(JValueGen::Double(value))?),
+                JValueGen::Void => Ok(FromValue::from_value(JValueGen::Void)?),
+            }
+        })
     }
 }
 
@@ -165,12 +175,15 @@ pub trait Constructible {
     type Return: FromValue;
 
     fn call_new(self_: ClassDecl, env: &mut JNIEnv, params: Self::Param) -> JResult<Self::Return> {
-        let signature = make_signature(&Self::Param::signature(), <() as FromValue>::signature());
-        let param = params.as_param(env)?;
-        let param = borrow_params(&param);
-        let obj = env.new_object(self_.for_finding(), &signature, param.as_slice())?;
+        env.with_local_frame(16, |env| {
+            let signature =
+                make_signature(&Self::Param::signature(), <() as FromValue>::signature());
+            let param = params.as_param(env)?;
+            let param = borrow_params(&param);
+            let obj = env.new_object(self_.for_finding(), &signature, param.as_slice())?;
 
-        FromValue::from_object(env.new_global_ref(obj)?, env)
+            FromValue::from_object(env.new_global_ref(obj)?, env)
+        })
     }
 }
 

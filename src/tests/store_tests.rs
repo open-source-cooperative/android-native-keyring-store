@@ -8,6 +8,7 @@ use keyring_core::{Entry, api::CredentialStoreApi};
 pub fn run_tests() -> (usize, usize) {
     let testing = [
         ("setup", setup as fn() -> keyring_core::Result<()>),
+        ("repeated_access", repeated_access),
         ("golden_path", golden_path),
         ("delete_credential", delete_credential),
         ("concurrent_access", concurrent_access),
@@ -98,6 +99,20 @@ pub fn cleanup() -> keyring_core::Result<()> {
     } else {
         log::info!("No test store found to delete");
     }
+    Ok(())
+}
+
+fn repeated_access() -> keyring_core::Result<()> {
+    let entry = Entry::new("repeated-access", "user")?;
+    for value in 0..128 {
+        let password = value.to_string();
+        entry.set_password(&password)?;
+        let read = entry.get_password()?;
+        if read != password {
+            return bad_result("repeated_access", &format!("{password:?}, got {read:?}"));
+        }
+    }
+    entry.delete_credential()?;
     Ok(())
 }
 
