@@ -85,10 +85,9 @@ impl StoreConfig {
             config.filename = format!("keyring-{}", config.name);
         }
         if let Some(divider) = mods.get("divider") {
-            // Vault dividers must have a non-alphabetic character so that the
-            // vault's config key is guaranteed not to match any credential's key.
-            if config.divider.chars().all(char::is_alphanumeric) {
-                let err = "must contain a non-alphabetic character".to_string();
+            // A non-alphanumeric divider separates credential keys from the config key.
+            if divider.chars().all(char::is_alphanumeric) {
+                let err = "must contain a non-alphanumeric character".to_string();
                 return Err(Error::Invalid("divider".to_string(), err));
             }
             config.divider = divider.to_string();
@@ -159,7 +158,7 @@ impl Store {
     /// The value of `divider` defaults to `\u{feff}@\u{feff}` which,
     /// when printed as part of a string, looks like `@` because
     /// the BOM character is considered a non-spacing word-joining
-    /// character. The divider _must_ contain a non-alphabetic character.
+    /// character. The divider _must_ contain a non-alphanumeric character.
     ///
     /// For `user-auth-required` and `user-auth-timeout`, see
     /// [the module docs](super#user-authentication).
@@ -378,14 +377,38 @@ mod tests {
 
     #[test]
     fn user_auth_timeout_must_fit_the_keystore_range() {
-        for timeout in ["0", "-1", "2147483648", "soon"] {
+        for timeout in ["0", "-1", "2147483648", "4294967295", "4294967296", "soon"] {
             assert_invalid(
                 &[NAME, REQUIRED, ("user-auth-timeout", timeout)],
                 "user-auth-timeout",
             );
         }
+        let config = parse(&[NAME, REQUIRED, ("user-auth-timeout", "1")]).unwrap();
+        assert_eq!(config.user_auth_timeout, Some(1));
         let config = parse(&[NAME, REQUIRED, ("user-auth-timeout", "2147483647")]).unwrap();
         assert_eq!(config.user_auth_timeout, Some(2147483647));
+    }
+
+    #[test]
+    fn divider_rejects_alphanumeric_and_empty() {
+        for divider in ["abc", "abc123", "123", "é1", ""] {
+            assert_invalid(&[NAME, ("divider", divider)], "divider");
+        }
+    }
+
+    #[test]
+    fn divider_accepts_punctuation() {
+        for divider in ["@", "~", "a@b"] {
+            let config = parse(&[NAME, ("divider", divider)]).unwrap();
+            assert_eq!(config.divider, divider);
+        }
+    }
+
+    #[test]
+    fn unknown_keys_and_malformed_values_are_rejected() {
+        assert_invalid(&[NAME, ("color", "blue")], "color");
+        assert_invalid(&[("name", "")], "name");
+        assert_invalid(&[NAME, ("user-auth-required", "yes")], "user-auth-required");
     }
 
     #[test]
