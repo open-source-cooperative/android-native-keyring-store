@@ -5,6 +5,8 @@ use android_log_sys::LogPriority;
 
 use keyring_core::{Entry, api::CredentialStoreApi};
 
+use crate::shared_preferences::Context;
+
 pub fn run_tests() -> (usize, usize) {
     let testing = [
         ("setup", setup as fn() -> keyring_core::Result<()>),
@@ -16,6 +18,8 @@ pub fn run_tests() -> (usize, usize) {
         ("user_auth_timeout", user_auth_timeout),
         ("lost_key", lost_key),
         ("exists", exists),
+        ("oversized_auth_timeout", oversized_auth_timeout),
+        ("direct_invalid_divider", direct_invalid_divider),
     ]
     .iter()
     // user_auth_timeout needs a secure lock screen and a device unlocked in the last 300 seconds.
@@ -345,5 +349,56 @@ fn exists() -> keyring_core::Result<()> {
     crate::Store::new_with_configuration(&config)?;
     crate::by_store::clear_vault_list();
     crate::Store::delete(&config)?;
+    Ok(())
+}
+
+fn oversized_auth_timeout() -> keyring_core::Result<()> {
+    let name = "oversized-timeout-test";
+    let config = crate::by_store::store::StoreConfig {
+        name: name.to_string(),
+        filename: format!("keyring-{name}"),
+        divider: "@".to_string(),
+        user_auth_timeout: Some(u32::MAX),
+    };
+    match crate::Store::new_with_store_config(config) {
+        Err(keyring_core::Error::Invalid(key, _)) if key == "user-auth-timeout" => {}
+        other => {
+            return bad_result(
+                "new_with_store_config",
+                &format!("Invalid(user-auth-timeout), got {other:?}"),
+            );
+        }
+    }
+    // The parser cannot construct this configuration for `Store::delete`.
+    let (vm, context) = crate::android_context()?;
+    let mut env = vm.attach_current_thread().expect("attach_current_thread");
+    let ctx = Context::from_raw(context);
+    let filename = format!("keyring-{name}");
+    ctx.delete_shared_preferences(&mut env, &filename)
+        .expect("delete_shared_preferences");
+    Ok(())
+}
+
+fn direct_invalid_divider() -> keyring_core::Result<()> {
+    let name = "direct-divider-test";
+    let config = crate::by_store::store::StoreConfig {
+        name: name.to_string(),
+        filename: format!("keyring-{name}"),
+        divider: "abc".to_string(),
+        ..Default::default()
+    };
+    match crate::Store::new_with_store_config(config) {
+        Err(keyring_core::Error::Invalid(key, _)) if key == "divider" => {}
+        other => {
+            return bad_result(
+                "new_with_store_config",
+                &format!("Invalid(divider), got {other:?}"),
+            );
+        }
+    }
+    let valid = HashMap::from([("name", name), ("divider", "@")]);
+    if crate::Store::exists(&valid)? {
+        return bad_result("exists", "false after a rejected divider");
+    }
     Ok(())
 }

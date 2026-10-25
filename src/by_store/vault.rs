@@ -194,10 +194,9 @@ impl Vault {
     }
 
     fn new(config: &StoreConfig) -> Result<Self> {
-        // Vault dividers must have a non-alphabetic character so that the
-        // vault's config key is guaranteed not to match any credential's key.
+        // A non-alphanumeric divider separates credential keys from the config key.
         if config.divider.chars().all(char::is_alphanumeric) {
-            let err = "must contain a non-alphabetic character".to_string();
+            let err = "must contain a non-alphanumeric character".to_string();
             return Err(Error::Invalid("divider".to_string(), err));
         }
         log::debug!("Creating new vault with config {config:?}");
