@@ -162,16 +162,23 @@ fn concurrent_access() -> keyring_core::Result<()> {
             })
         })
         .collect::<Vec<_>>();
+    let mut first_panic = None;
     for t in all {
-        t.join().map_err(|e| {
-            if e.is::<String>() {
-                log::error!(
-                    "Failed thread panic message: {}",
-                    e.downcast::<String>().unwrap()
-                );
-            }
-            keyring_core::Error::Invalid("join".to_string(), "failed".to_string())
-        })?;
+        let result = t.join();
+        if first_panic.is_none() {
+            first_panic = result.err();
+        }
+    }
+    if let Some(panic) = first_panic {
+        let message = match panic.downcast::<String>() {
+            Ok(message) => *message,
+            Err(payload) => payload
+                .downcast_ref::<&str>()
+                .copied()
+                .unwrap_or("thread panicked")
+                .to_owned(),
+        };
+        return Err(keyring_core::Error::Invalid("join".to_owned(), message));
     }
     let entry = Entry::new("concurrent", "user")?;
     let s = entry.get_password()?;
