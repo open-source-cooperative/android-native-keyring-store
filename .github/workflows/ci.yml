@@ -33,7 +33,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        features: ["", "legacy,compile-tests,android-log"]
+        features: ["", "compile-tests,android-log"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -50,7 +50,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        features: ["", "legacy,compile-tests,android-log"]
+        features: ["", "compile-tests,android-log"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

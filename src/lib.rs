@@ -14,16 +14,13 @@ Keystore entry. The implementation, found in
 the [by_store] module, supports search and doesn't allow for ambiguity
 or provide any attributes on credentials.
 
-# Legacy Credential Store
+# Upgrading from 0.5 or Earlier
 
-Earlier versions of this crate provided a single store that used one SharedPreferences
-file and Keystore entry _per service name_, rather than _per store name_. This
-legacy implementation, found in the [by_service] module, does not support search and leaves
-keys behind even when all of their associated credentials are deleted. It is still
-available under the `legacy` feature flag via the [LegacyStore::from_ndk_context]
-constructor, but it is deprecated and may be removed in future versions of the crate. All
-client applications are advised to migrate any existing credentials from legacy storage to
-a named store. See the [Migration Guide](by_service#migration-guide) for details.
+Versions 0.5 and earlier stored credentials in one SharedPreferences file and Keystore entry
+_per service name_. This version no longer reads that layout, so migrate any such credentials
+to a named store with a 1.x release first, as its
+[Migration Guide](https://docs.rs/android-native-keyring-store/1.0.0/android_native_keyring_store/by_service/index.html#migration-guide)
+describes.
 
 ## Application Requirements
 
@@ -48,13 +45,6 @@ use jni::{
 pub mod by_store;
 pub use by_store::Cred;
 pub use by_store::Store;
-
-#[cfg(feature = "legacy")]
-pub mod by_service;
-#[cfg(feature = "legacy")]
-pub use by_service::Cred as LegacyCred;
-#[cfg(feature = "legacy")]
-pub use by_service::Store as LegacyStore;
 
 #[cfg(feature = "android-log")]
 mod android_log;
