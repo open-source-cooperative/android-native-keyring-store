@@ -2,12 +2,14 @@ use std::collections::HashMap;
 use std::panic::catch_unwind;
 
 use android_log_sys::LogPriority;
-use jni::{JNIEnv, JavaVM};
+use jni::{JNIEnv, JavaVM, errors::Error as JavaError};
 
 use keyring_core::{Entry, get_default_store};
 
 use crate::{
     error::CorruptedData,
+    keystore::KeyStore,
+    methods::{ClassDecl, Constructible, JResult, Method},
     shared_preferences::{Context, MODE_PRIVATE},
 };
 
@@ -21,6 +23,9 @@ pub fn run_tests(env: JNIEnv, context: Context) -> (usize, usize) {
         ("data_too_small", data_too_small),
         ("invalid_iv", invalid_iv),
         ("decryption_failure", decryption_failure),
+        ("jni_instance_frames", jni_instance_frames),
+        ("jni_static_frames", jni_static_frames),
+        ("jni_constructor_frames", jni_constructor_frames),
         ("teardown", teardown),
     ]
     .iter()
@@ -230,5 +235,81 @@ fn decryption_failure(_vm: JavaVM, _ctx: Context) -> keyring_core::Result<()> {
         Err(e) => return bad_result("get_password", &format!("'reset', got {e:?}")),
     }
     entry1.delete_credential()?;
+    Ok(())
+}
+
+fn expect_java_exception<T>(env: &mut JNIEnv, result: JResult<T>, class: &str) {
+    let exception = env.exception_occurred().unwrap();
+    env.exception_clear().unwrap();
+    let exception = env.auto_local(exception);
+    assert!(matches!(result, Err(JavaError::JavaException)));
+    assert!(!exception.is_null());
+    assert!(env.is_instance_of(&exception, class).unwrap());
+}
+
+fn jni_instance_frames(vm: JavaVM, _ctx: Context) -> keyring_core::Result<()> {
+    struct Substring;
+    impl Method for Substring {
+        type Param = i32;
+        type Return = String;
+
+        const NAME: &str = "substring";
+    }
+
+    let mut env = vm.attach_current_thread().unwrap();
+    let text = env.new_string("prefix secret").unwrap();
+    let text = env.new_global_ref(text).unwrap();
+    for _ in 0..1024 {
+        let result = Substring::call(text.as_obj(), &mut env, -1);
+        expect_java_exception(
+            &mut env,
+            result,
+            "java/lang/StringIndexOutOfBoundsException",
+        );
+        let actual = Substring::call(text.as_obj(), &mut env, 7).unwrap();
+        assert_eq!(actual, "secret");
+    }
+    Ok(())
+}
+
+fn jni_static_frames(vm: JavaVM, _ctx: Context) -> keyring_core::Result<()> {
+    let mut env = vm.attach_current_thread().unwrap();
+    for _ in 0..1024 {
+        let result = KeyStore::get_instance(&mut env, "keyring-missing-type");
+        expect_java_exception(&mut env, result, "java/security/KeyStoreException");
+        let store = KeyStore::get_instance(&mut env, "AndroidKeyStore").unwrap();
+        store.load(&mut env).unwrap();
+        assert!(
+            !store
+                .contains_alias(&mut env, "keyring-missing-alias")
+                .unwrap()
+        );
+    }
+    Ok(())
+}
+
+fn jni_constructor_frames(vm: JavaVM, _ctx: Context) -> keyring_core::Result<()> {
+    struct Decode;
+    impl Constructible for Decode {
+        type Param = (&'static [u8], &'static str);
+        type Return = String;
+    }
+
+    let mut env = vm.attach_current_thread().unwrap();
+    for _ in 0..1024 {
+        let result = Decode::call_new(
+            ClassDecl("Ljava/lang/String;"),
+            &mut env,
+            (b"secret \xe2\x82\xac".as_slice(), "keyring-missing-charset"),
+        );
+        expect_java_exception(&mut env, result, "java/io/UnsupportedEncodingException");
+        let actual = Decode::call_new(
+            ClassDecl("Ljava/lang/String;"),
+            &mut env,
+            (b"secret \xe2\x82\xac".as_slice(), "UTF-8"),
+        )
+        .unwrap();
+        assert_eq!(actual, "secret €");
+    }
     Ok(())
 }
