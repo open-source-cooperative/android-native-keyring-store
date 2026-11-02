@@ -7,7 +7,11 @@ use keyring_core::{Entry, api::CredentialStoreApi};
 
 pub fn run_tests() -> (usize, usize) {
     let testing = [
-        ("setup", setup as fn() -> keyring_core::Result<()>),
+        (
+            "explicit_context",
+            super::context_tests::after_activity as fn() -> keyring_core::Result<()>,
+        ),
+        ("setup", setup),
         ("golden_path", golden_path),
         ("delete_credential", delete_credential),
         ("concurrent_access", concurrent_access),

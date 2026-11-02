@@ -1,20 +1,20 @@
 use crate::methods::{ClassDecl, FromValue, JResult, Method, NoParam, SignatureComp};
 use base64::{Engine, prelude::BASE64_STANDARD};
-#[cfg(feature = "compile-tests")]
-use jni::objects::JObject;
 use jni::{
     JNIEnv,
-    objects::{AutoLocal, GlobalRef, JMap, JString},
+    objects::{AutoLocal, GlobalRef, JMap, JObject, JString},
 };
 use std::marker::PhantomData;
 
 pub const MODE_PRIVATE: i32 = 0;
 
+#[cfg(any(feature = "legacy", feature = "compile-tests"))]
 #[derive(Clone)]
 pub struct Context {
     self_: GlobalRef,
 }
 
+#[cfg(any(feature = "legacy", feature = "compile-tests"))]
 impl Context {
     #[cfg(feature = "compile-tests")]
     pub fn new(env: &JNIEnv, obj: JObject) -> JResult<Self> {
@@ -23,6 +23,7 @@ impl Context {
         })
     }
 
+    #[cfg(feature = "legacy")]
     pub fn from_raw(self_: GlobalRef) -> Self {
         Self { self_ }
     }
@@ -33,33 +34,42 @@ impl Context {
         name: &str,
         mode: i32,
     ) -> JResult<SharedPreferences> {
-        struct ThisMethod<'a>(PhantomData<&'a ()>);
-        impl<'a> Method for ThisMethod<'a> {
-            type Param = (&'a str, i32);
-            type Return = SharedPreferences;
-
-            const NAME: &'static str = "getSharedPreferences";
-        }
-
-        ThisMethod::call(&self.self_, env, (name, mode))
-    }
-
-    pub fn delete_shared_preferences(&self, env: &mut JNIEnv, name: &str) -> JResult<bool> {
-        struct ThisMethod<'a>(PhantomData<&'a ()>);
-        impl<'a> Method for ThisMethod<'a> {
-            type Param = &'a str;
-            type Return = bool;
-
-            const NAME: &'static str = "deleteSharedPreferences";
-        }
-
-        ThisMethod::call(&self.self_, env, name)
+        get_shared_preferences(self.self_.as_obj(), env, name, mode)
     }
 
     #[cfg(feature = "legacy")]
     pub fn id(&self) -> usize {
         self.self_.as_raw() as usize
     }
+}
+
+pub fn get_shared_preferences(
+    context: &JObject,
+    env: &mut JNIEnv,
+    name: &str,
+    mode: i32,
+) -> JResult<SharedPreferences> {
+    struct ThisMethod<'a>(PhantomData<&'a ()>);
+    impl<'a> Method for ThisMethod<'a> {
+        type Param = (&'a str, i32);
+        type Return = SharedPreferences;
+
+        const NAME: &'static str = "getSharedPreferences";
+    }
+
+    ThisMethod::call(context, env, (name, mode))
+}
+
+pub fn delete_shared_preferences(context: &JObject, env: &mut JNIEnv, name: &str) -> JResult<bool> {
+    struct ThisMethod<'a>(PhantomData<&'a ()>);
+    impl<'a> Method for ThisMethod<'a> {
+        type Param = &'a str;
+        type Return = bool;
+
+        const NAME: &'static str = "deleteSharedPreferences";
+    }
+
+    ThisMethod::call(context, env, name)
 }
 
 pub struct SharedPreferences {

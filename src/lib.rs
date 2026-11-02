@@ -27,18 +27,12 @@ a named store. See the [Migration Guide](by_service#migration-guide) for details
 
 ## Application Requirements
 
-This crate compiles to produce a native library that can be loaded into an Android
-application. Because this crate gets its Android application context from the
-[ndk-context crate](https://crates.io/crates/ndk-context), applications that use
-this crate must initialize the `application-context` object provided by the `ndk-context`
-crate before they can create credential stores. The
-[README](https://github.com/open-source-cooperative/android-native-keyring-store) for this
-crate provides detailed instructions for how to do this.
+Named stores accept an owned [AndroidContext] through [Store::new_with_context], without initializing `ndk-context`. Constructors without an explicit context require the framework or application to initialize `ndk-context` before use.
 
  */
 
 use std::ffi::c_void;
-use std::sync::{Arc, OnceLock};
+use std::sync::OnceLock;
 
 use jni::{
     JNIEnv, JavaVM,
@@ -48,6 +42,7 @@ use jni::{
 pub mod by_store;
 pub use by_store::Cred;
 pub use by_store::Store;
+pub use context::AndroidContext;
 
 #[cfg(feature = "legacy")]
 pub mod by_service;
@@ -59,6 +54,7 @@ pub use by_service::Store as LegacyStore;
 #[cfg(feature = "android-log")]
 mod android_log;
 mod cipher;
+mod context;
 mod crypto;
 mod error;
 mod keystore;
@@ -119,15 +115,13 @@ pub extern "system" fn Java_io_crates_keyring_Keyring_00024Companion_initializeN
     });
 }
 
-/// The `JavaVM` and application context that `ndk-context` holds.
-fn android_context() -> error::AndroidKeyringResult<(Arc<JavaVM>, GlobalRef)> {
+/// Retains the application storage domain supplied by `ndk-context`.
+fn android_context() -> error::AndroidKeyringResult<AndroidContext> {
     let ctx = ndk_context::android_context();
     // SAFETY: ndk-context hands out the process's `JavaVM`.
     let java_vm = unsafe { JavaVM::from_raw(ctx.vm().cast())? };
-    let env = java_vm.attach_current_thread()?;
-    let vm = Arc::new(env.get_java_vm()?);
-    // SAFETY: ndk-context holds this reference, and `new_global_ref` below takes our own.
+    let mut env = java_vm.attach_current_thread()?;
+    // SAFETY: `ndk-context` holds this reference while `AndroidContext::new` takes its own.
     let context = unsafe { JObject::from_raw(ctx.context().cast()) };
-    let context = env.new_global_ref(context)?;
-    Ok((vm, context))
+    Ok(AndroidContext::new(&mut env, &context)?)
 }

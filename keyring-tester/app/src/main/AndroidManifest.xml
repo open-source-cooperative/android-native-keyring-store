@@ -20,6 +20,11 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <!-- Exported so the emulator script can start the Service before any activity. -->
+        <service
+            android:name=".ExplicitContextService"
+            android:exported="true"
+            tools:ignore="ExportedService" />
     </application>
 
 </manifest>
