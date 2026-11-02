@@ -24,7 +24,7 @@ use super::store::StoreConfig;
 /// protected by a mutex. This mutex also serves to serialize access to the
 /// credentials held in the vault. All accesses to the vault must be
 /// performed through the mutex.
-pub type AtomicVault = Arc<Mutex<Vault>>;
+pub(crate) type AtomicVault = Arc<Mutex<Vault>>;
 
 // Because multiple stores can access the same [AtomicVault], we keep a list
 // of all the known vaults so we can look up the one a user is requesting.
@@ -34,7 +34,7 @@ static VAULTS: Mutex<Vec<AtomicVault>> = Mutex::new(Vec::new());
 ///
 /// If an existing vault with that name has a different config, return
 /// an error naming one of the differences.
-pub fn lookup(config: &StoreConfig) -> Result<AtomicVault> {
+pub(crate) fn lookup(config: &StoreConfig) -> Result<AtomicVault> {
     log::debug!("Looking up vault with config: {:?}", config);
     let mut vaults = VAULTS
         .lock()
@@ -71,7 +71,7 @@ pub fn lookup(config: &StoreConfig) -> Result<AtomicVault> {
 /// If there is a vault with a matching name but a different config, return an error.
 ///
 /// If the matching vault is in use, return an error.
-pub fn delete(config: &StoreConfig) -> Result<bool> {
+pub(crate) fn delete(config: &StoreConfig) -> Result<bool> {
     log::debug!("Deleting vault with config: {:?}", config);
     let vaults = VAULTS
         .lock()
@@ -101,7 +101,7 @@ pub fn delete(config: &StoreConfig) -> Result<bool> {
 }
 
 /// Whether a vault exists, without creating it or needing its key.
-pub fn exists(config: &StoreConfig) -> Result<bool> {
+pub(crate) fn exists(config: &StoreConfig) -> Result<bool> {
     let vaults = VAULTS
         .lock()
         .expect("Vaults list lock poisoned: report a bug!");

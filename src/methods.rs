@@ -99,7 +99,7 @@ impl ClassDecl {
     }
 }
 
-pub trait Method {
+pub(crate) trait Method {
     type Param: AsParam;
     type Return: FromValue;
 
@@ -127,7 +127,7 @@ pub trait Method {
     }
 }
 
-pub trait StaticMethod {
+pub(crate) trait StaticMethod {
     type Param: AsParam;
     type Return: FromValue;
 
@@ -160,7 +160,7 @@ pub trait StaticMethod {
     }
 }
 
-pub trait Constructible {
+pub(crate) trait Constructible {
     type Param: AsParam;
     type Return: FromValue;
 
@@ -174,7 +174,7 @@ pub trait Constructible {
     }
 }
 
-pub trait AsParam {
+pub(crate) trait AsParam {
     fn signature() -> Vec<SignatureComp>;
     fn as_param<'a>(&self, env: &mut JNIEnv<'a>) -> JResult<Vec<JValueGen<JObject<'a>>>>;
 }
@@ -222,7 +222,7 @@ where
     }
 }
 
-pub struct NoParam;
+pub(crate) struct NoParam;
 impl AsParam for NoParam {
     fn signature() -> Vec<SignatureComp> {
         vec![]
@@ -233,7 +233,7 @@ impl AsParam for NoParam {
     }
 }
 
-pub trait ToValue: Sized {
+pub(crate) trait ToValue: Sized {
     fn signature() -> SignatureComp;
     fn to_value<'a>(&self, env: &mut JNIEnv<'a>) -> JResult<JValueGen<JObject<'a>>>;
 }
@@ -328,7 +328,7 @@ impl ToValue for bool {
     }
 }
 
-pub trait FromValue: Sized {
+pub(crate) trait FromValue: Sized {
     fn signature() -> SignatureComp;
 
     fn from_object(value: GlobalRef, env: &mut JNIEnv) -> JResult<Self> {
@@ -442,4 +442,4 @@ fn borrow_params<'a, 'b>(
         .collect()
 }
 
-pub type JResult<T> = Result<T, jni::errors::Error>;
+pub(crate) type JResult<T> = Result<T, jni::errors::Error>;

@@ -8,26 +8,26 @@ use jni::{
 };
 use std::marker::PhantomData;
 
-pub const MODE_PRIVATE: i32 = 0;
+pub(crate) const MODE_PRIVATE: i32 = 0;
 
 #[derive(Clone)]
-pub struct Context {
+pub(crate) struct Context {
     self_: GlobalRef,
 }
 
 impl Context {
     #[cfg(feature = "compile-tests")]
-    pub fn new(env: &JNIEnv, obj: JObject) -> JResult<Self> {
+    pub(crate) fn new(env: &JNIEnv, obj: JObject) -> JResult<Self> {
         Ok(Self {
             self_: env.new_global_ref(obj)?,
         })
     }
 
-    pub fn from_raw(self_: GlobalRef) -> Self {
+    pub(crate) fn from_raw(self_: GlobalRef) -> Self {
         Self { self_ }
     }
 
-    pub fn get_shared_preferences(
+    pub(crate) fn get_shared_preferences(
         &self,
         env: &mut JNIEnv,
         name: &str,
@@ -44,7 +44,7 @@ impl Context {
         ThisMethod::call(&self.self_, env, (name, mode))
     }
 
-    pub fn delete_shared_preferences(&self, env: &mut JNIEnv, name: &str) -> JResult<bool> {
+    pub(crate) fn delete_shared_preferences(&self, env: &mut JNIEnv, name: &str) -> JResult<bool> {
         struct ThisMethod<'a>(PhantomData<&'a ()>);
         impl<'a> Method for ThisMethod<'a> {
             type Param = &'a str;
@@ -57,7 +57,7 @@ impl Context {
     }
 
     #[cfg(feature = "legacy")]
-    pub fn id(&self) -> usize {
+    pub(crate) fn id(&self) -> usize {
         self.self_.as_raw() as usize
     }
 }

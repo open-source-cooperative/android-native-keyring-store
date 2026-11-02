@@ -35,7 +35,7 @@ impl std::fmt::Debug for Cred {
 
 impl Cred {
     /// Create a legacy credential for a service and user.
-    pub fn new(java_vm: Arc<JavaVM>, context: Context, service: &str, user: &str) -> Self {
+    pub(crate) fn new(java_vm: Arc<JavaVM>, context: Context, service: &str, user: &str) -> Self {
         Self {
             java_vm,
             context,

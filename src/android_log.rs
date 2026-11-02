@@ -16,7 +16,7 @@ use tracing_subscriber::{
 //     }
 // }
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_io_crates_keyring_KeyringLog_00024Companion_setLog(
+extern "system" fn Java_io_crates_keyring_KeyringLog_00024Companion_setLog(
     mut env: JNIEnv,
     _class: JObject,
     filter: JString,
@@ -39,7 +39,7 @@ pub extern "system" fn Java_io_crates_keyring_KeyringLog_00024Companion_setLog(
     }
 }
 
-pub struct AndroidLogCat;
+struct AndroidLogCat;
 impl<S> Layer<S> for AndroidLogCat
 where
     S: Subscriber + for<'a> LookupSpan<'a>,
@@ -80,12 +80,12 @@ where
     }
 }
 
-pub struct SpanPrefix {
+struct SpanPrefix {
     name: String,
     values: String,
 }
 impl SpanPrefix {
-    pub fn on_new_span<S>(
+    fn on_new_span<S>(
         attrs: &span::Attributes<'_>,
         id: &span::Id,
         ctx: tracing_subscriber::layer::Context<'_, S>,
@@ -107,7 +107,7 @@ impl SpanPrefix {
         }
     }
 
-    pub fn on_record<S>(
+    fn on_record<S>(
         id: &span::Id,
         values: &span::Record<'_>,
         ctx: tracing_subscriber::layer::Context<'_, S>,
@@ -128,7 +128,7 @@ impl SpanPrefix {
         }
     }
 
-    pub fn on_event<S>(
+    fn on_event<S>(
         event: &tracing::Event<'_>,
         ctx: tracing_subscriber::layer::Context<'_, S>,
     ) -> String

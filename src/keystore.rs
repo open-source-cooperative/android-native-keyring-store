@@ -10,16 +10,16 @@ use crate::methods::{
     ToValue,
 };
 
-pub const BLOCK_MODE_GCM: &str = "GCM";
-pub const ENCRYPTION_PADDING_NONE: &str = "NoPadding";
-pub const KEY_ALGORITHM_AES: &str = "AES";
-pub const PROVIDER: &str = "AndroidKeyStore";
-pub const PURPOSE_ENCRYPT: i32 = 1;
-pub const PURPOSE_DECRYPT: i32 = 2;
-pub const AUTH_DEVICE_CREDENTIAL: i32 = 1;
-pub const AUTH_BIOMETRIC_STRONG: i32 = 2;
+pub(crate) const BLOCK_MODE_GCM: &str = "GCM";
+pub(crate) const ENCRYPTION_PADDING_NONE: &str = "NoPadding";
+pub(crate) const KEY_ALGORITHM_AES: &str = "AES";
+pub(crate) const PROVIDER: &str = "AndroidKeyStore";
+pub(crate) const PURPOSE_ENCRYPT: i32 = 1;
+pub(crate) const PURPOSE_DECRYPT: i32 = 2;
+pub(crate) const AUTH_DEVICE_CREDENTIAL: i32 = 1;
+pub(crate) const AUTH_BIOMETRIC_STRONG: i32 = 2;
 
-pub struct KeyStore {
+pub(crate) struct KeyStore {
     self_: GlobalRef,
 }
 
@@ -38,7 +38,7 @@ impl KeyStore {
         ClassDecl("Ljava/security/KeyStore;")
     }
 
-    pub fn get_instance(env: &mut JNIEnv<'_>, store: &str) -> JResult<KeyStore> {
+    pub(crate) fn get_instance(env: &mut JNIEnv<'_>, store: &str) -> JResult<KeyStore> {
         struct ThisMethod<'a>(PhantomData<&'a ()>);
         impl<'a> StaticMethod for ThisMethod<'a> {
             type Param = &'a str;
@@ -50,7 +50,7 @@ impl KeyStore {
         ThisMethod::call(Self::class(), env, store)
     }
 
-    pub fn load(&self, env: &mut JNIEnv<'_>) -> JResult<()> {
+    pub(crate) fn load(&self, env: &mut JNIEnv<'_>) -> JResult<()> {
         struct LoadStoreParameter;
         impl ToValue for LoadStoreParameter {
             fn signature() -> SignatureComp {
@@ -73,7 +73,7 @@ impl KeyStore {
         ThisMethod::call(&self.self_, env, LoadStoreParameter)
     }
 
-    pub fn contains_alias(&self, env: &mut JNIEnv<'_>, alias: &str) -> JResult<bool> {
+    pub(crate) fn contains_alias(&self, env: &mut JNIEnv<'_>, alias: &str) -> JResult<bool> {
         struct ThisMethod<'a>(PhantomData<&'a ()>);
         impl<'a> Method for ThisMethod<'a> {
             type Param = &'a str;
@@ -85,7 +85,7 @@ impl KeyStore {
         ThisMethod::call(&self.self_, env, alias)
     }
 
-    pub fn get_key(&self, env: &mut JNIEnv<'_>, alias: &str) -> JResult<Option<Key>> {
+    pub(crate) fn get_key(&self, env: &mut JNIEnv<'_>, alias: &str) -> JResult<Option<Key>> {
         struct ThisMethod<'a>(PhantomData<&'a ()>);
         impl<'a> Method for ThisMethod<'a> {
             type Param = (&'a str, Option<Vec<u16>>);
@@ -97,7 +97,7 @@ impl KeyStore {
         ThisMethod::call(&self.self_, env, (alias, None))
     }
 
-    pub fn delete_entry(&self, env: &mut JNIEnv<'_>, alias: &str) -> JResult<()> {
+    pub(crate) fn delete_entry(&self, env: &mut JNIEnv<'_>, alias: &str) -> JResult<()> {
         struct ThisMethod<'a>(PhantomData<&'a ()>);
         impl<'a> Method for ThisMethod<'a> {
             type Param = &'a str;
@@ -167,7 +167,7 @@ impl From<SecretKey> for Key {
     }
 }
 
-pub struct KeyGenerator {
+pub(crate) struct KeyGenerator {
     self_: GlobalRef,
 }
 
@@ -186,7 +186,7 @@ impl KeyGenerator {
         ClassDecl("Ljavax/crypto/KeyGenerator;")
     }
 
-    pub fn get_instance(env: &mut JNIEnv, algorithm: &str, provider: &str) -> JResult<Self> {
+    pub(crate) fn get_instance(env: &mut JNIEnv, algorithm: &str, provider: &str) -> JResult<Self> {
         struct ThisMethod<'a>(PhantomData<&'a ()>);
         impl<'a> StaticMethod for ThisMethod<'a> {
             type Param = (&'a str, &'a str);
@@ -198,7 +198,7 @@ impl KeyGenerator {
         ThisMethod::call(Self::class(), env, (algorithm, provider))
     }
 
-    pub fn init(&self, env: &mut JNIEnv, spec: AlgorithmParameterSpec) -> JResult<()> {
+    pub(crate) fn init(&self, env: &mut JNIEnv, spec: AlgorithmParameterSpec) -> JResult<()> {
         struct ThisMethod;
         impl Method for ThisMethod {
             type Param = AlgorithmParameterSpec;
@@ -210,7 +210,7 @@ impl KeyGenerator {
         ThisMethod::call(&self.self_, env, spec)
     }
 
-    pub fn generate_key(&self, env: &mut JNIEnv) -> JResult<SecretKey> {
+    pub(crate) fn generate_key(&self, env: &mut JNIEnv) -> JResult<SecretKey> {
         struct ThisMethod;
         impl Method for ThisMethod {
             type Param = NoParam;
@@ -223,7 +223,7 @@ impl KeyGenerator {
     }
 }
 
-pub struct KeyGenParameterSpecBuilder {
+pub(crate) struct KeyGenParameterSpecBuilder {
     self_: GlobalRef,
 }
 
@@ -244,7 +244,7 @@ impl KeyGenParameterSpecBuilder {
 }
 
 impl KeyGenParameterSpecBuilder {
-    pub fn new(env: &mut JNIEnv, alias: &str, purpose: i32) -> JResult<Self> {
+    pub(crate) fn new(env: &mut JNIEnv, alias: &str, purpose: i32) -> JResult<Self> {
         struct ThisMethod<'a>(PhantomData<&'a ()>);
         impl<'a> Constructible for ThisMethod<'a> {
             type Param = (&'a str, i32);
@@ -254,7 +254,7 @@ impl KeyGenParameterSpecBuilder {
         ThisMethod::call_new(Self::class(), env, (alias, purpose))
     }
 
-    pub fn set_block_modes(
+    pub(crate) fn set_block_modes(
         &self,
         env: &mut JNIEnv,
         modes: &[&str],
@@ -270,7 +270,7 @@ impl KeyGenParameterSpecBuilder {
         ThisMethod::call(&self.self_, env, modes)
     }
 
-    pub fn set_encryption_paddings(
+    pub(crate) fn set_encryption_paddings(
         &self,
         env: &mut JNIEnv,
         modes: &[&str],
@@ -286,7 +286,7 @@ impl KeyGenParameterSpecBuilder {
         ThisMethod::call(&self.self_, env, modes)
     }
 
-    pub fn set_user_authentication_required(
+    pub(crate) fn set_user_authentication_required(
         &self,
         env: &mut JNIEnv,
         required: bool,
@@ -303,7 +303,7 @@ impl KeyGenParameterSpecBuilder {
     }
 
     /// Requires API 30.
-    pub fn set_user_authentication_parameters(
+    pub(crate) fn set_user_authentication_parameters(
         &self,
         env: &mut JNIEnv,
         timeout_seconds: i32,
@@ -320,7 +320,7 @@ impl KeyGenParameterSpecBuilder {
         ThisMethod::call(&self.self_, env, (timeout_seconds, auth_type))
     }
 
-    pub fn build(&self, env: &mut JNIEnv) -> JResult<KeyGenParameterSpec> {
+    pub(crate) fn build(&self, env: &mut JNIEnv) -> JResult<KeyGenParameterSpec> {
         struct ThisMethod;
         impl Method for ThisMethod {
             type Param = NoParam;
@@ -333,7 +333,7 @@ impl KeyGenParameterSpecBuilder {
     }
 }
 
-pub struct KeyGenParameterSpec {
+pub(crate) struct KeyGenParameterSpec {
     self_: GlobalRef,
 }
 
@@ -353,7 +353,7 @@ impl KeyGenParameterSpec {
     }
 }
 
-pub struct AlgorithmParameterSpec {
+pub(crate) struct AlgorithmParameterSpec {
     self_: GlobalRef,
 }
 

@@ -36,6 +36,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", optional = true }
 
 [lints.rust]
+unreachable_pub = "warn"
 unexpected_cfgs = { level = "warn", check-cfg = ["cfg(keyring_coverage)"] }
 
 [lints.clippy]
