@@ -14,13 +14,23 @@ class KeyringTests {
             val mismatchedStorage = object : ContextWrapper(context) {
                 override fun getDataDir(): File = File(context.dataDir, "different-storage")
             }
-            return runContextTestsWithInvalidContexts(context, missingApplication, mismatchedStorage)
+            val throwingApplication = object : ContextWrapper(context) {
+                override fun getApplicationContext(): Context =
+                    throw IllegalStateException("no application context")
+            }
+            return runContextTestsWithInvalidContexts(
+                context,
+                missingApplication,
+                mismatchedStorage,
+                throwingApplication,
+            )
         }
 
         private external fun runContextTestsWithInvalidContexts(
             context: Context,
             missingApplication: Context,
             mismatchedStorage: Context,
+            throwingApplication: Context,
         ): Boolean
 
         external fun runAllTests(context: Context)

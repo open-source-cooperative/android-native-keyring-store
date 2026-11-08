@@ -27,12 +27,14 @@ pub extern "system" fn Java_io_crates_keyring_KeyringTests_00024Companion_runCon
     context: JObject,
     missing_application: JObject,
     mismatched_storage: JObject,
+    throwing_application: JObject,
 ) -> jboolean {
     match catch_unwind(AssertUnwindSafe(|| {
         before_activity(
             &mut env,
             &context,
             [&missing_application, &mismatched_storage],
+            &throwing_application,
         )
     })) {
         Ok(Ok(())) => true.into(),
@@ -61,6 +63,7 @@ fn before_activity(
     env: &mut JNIEnv,
     context: &JObject,
     invalid_contexts: [&JObject; 2],
+    throwing_application: &JObject,
 ) -> AndroidKeyringResult<()> {
     assert!(
         matches!(AndroidContext::new(env, &JObject::null()), Err(Error::Invalid(key, _)) if key == "context")
@@ -75,6 +78,11 @@ fn before_activity(
     )?;
     assert!(matches!(
         AndroidContext::new(env, context),
+        Err(Error::PlatformFailure(_))
+    ));
+    assert!(!env.exception_check()?);
+    assert!(matches!(
+        AndroidContext::new(env, throwing_application),
         Err(Error::PlatformFailure(_))
     ));
     assert!(!env.exception_check()?);
