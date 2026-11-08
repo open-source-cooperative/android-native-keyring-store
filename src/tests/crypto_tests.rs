@@ -2,7 +2,11 @@ use std::collections::HashMap;
 use std::panic::catch_unwind;
 
 use android_log_sys::LogPriority;
-use jni::{JNIEnv, JavaVM, errors::Error as JavaError};
+use jni::{
+    JNIEnv, JavaVM,
+    errors::Error as JavaError,
+    objects::{JObject, JThrowable, JValue},
+};
 
 use keyring_core::{Entry, get_default_store};
 
@@ -10,9 +14,10 @@ use super::bad_result;
 
 use crate::{
     error::CorruptedData,
-    keystore::KeyStore,
+    keystore::{KeyStore, is_expired_timeout},
     methods::{ClassDecl, Constructible, JResult, Method},
     shared_preferences::{Context, MODE_PRIVATE},
+    throwable::Throwable,
 };
 
 pub fn run_tests(env: JNIEnv, context: Context) -> (usize, usize) {
@@ -26,6 +31,7 @@ pub fn run_tests(env: JNIEnv, context: Context) -> (usize, usize) {
         ("invalid_iv", invalid_iv),
         ("malformed_base64", malformed_base64),
         ("decryption_failure", decryption_failure),
+        ("expired_timeout_inspection", expired_timeout_inspection),
         ("jni_instance_frames", jni_instance_frames),
         ("jni_static_frames", jni_static_frames),
         ("jni_constructor_frames", jni_constructor_frames),
@@ -260,6 +266,59 @@ fn decryption_failure(_vm: JavaVM, _ctx: Context) -> keyring_core::Result<()> {
         Err(e) => return bad_result("get_password", &format!("'reset', got {e:?}")),
     }
     entry1.delete_credential()?;
+    Ok(())
+}
+
+/// The pending `Throwable` after throwing a new `class`, with `cause` when given.
+fn thrown(env: &mut JNIEnv, class: &str, cause: Option<&JObject>) -> Throwable {
+    let exception = match cause {
+        Some(cause) => {
+            let message = env.new_string("refused").unwrap();
+            env.new_object(
+                class,
+                "(Ljava/lang/String;Ljava/lang/Throwable;)V",
+                &[JValue::Object(&message), JValue::Object(cause)],
+            )
+        }
+        None => env.new_object(class, "()V", &[]),
+    }
+    .unwrap();
+    env.throw(JThrowable::from(exception)).unwrap();
+    Throwable::take_pending(env).unwrap().unwrap()
+}
+
+fn expired_timeout_inspection(vm: JavaVM, _ctx: Context) -> keyring_core::Result<()> {
+    let mut env = vm.attach_current_thread().unwrap();
+    let general_cause = env
+        .new_object("java/security/KeyStoreException", "()V", &[])
+        .unwrap();
+    // The platform class has no public constructor, so this cause carries no message.
+    let keystore_cause = env
+        .alloc_object("android/security/KeyStoreException")
+        .unwrap();
+    let refusals = [
+        ("java/lang/IllegalStateException", None),
+        (
+            "android/security/keystore/KeyPermanentlyInvalidatedException",
+            None,
+        ),
+        ("java/security/InvalidKeyException", None),
+        ("java/security/InvalidKeyException", Some(&general_cause)),
+        ("java/security/InvalidKeyException", Some(&keystore_cause)),
+        ("io/crates/keyring/UnreadableCauseException", None),
+    ];
+    for (class, cause) in refusals {
+        let exception = thrown(&mut env, class, cause);
+        if is_expired_timeout(&mut env, &exception) {
+            return bad_result("is_expired_timeout", &format!("false for {class}"));
+        }
+        if env.exception_check().unwrap() {
+            return bad_result(
+                "is_expired_timeout",
+                &format!("no pending exception for {class}"),
+            );
+        }
+    }
     Ok(())
 }
 

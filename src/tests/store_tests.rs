@@ -20,6 +20,7 @@ pub fn run_tests() -> (usize, usize) {
         ("existing_credential", existing_credential),
         ("teardown", teardown),
         ("user_auth_timeout", user_auth_timeout),
+        ("auth_without_lock_screen", auth_without_lock_screen),
         ("lost_key", lost_key),
         ("exists", exists),
         ("configuration_mismatch", configuration_mismatch),
@@ -28,8 +29,13 @@ pub fn run_tests() -> (usize, usize) {
         ("direct_invalid_divider", direct_invalid_divider),
     ]
     .iter()
-    // user_auth_timeout needs a secure lock screen and a device unlocked in the last 300 seconds.
-    .filter(|(name, _)| cfg!(feature = "user-auth-tests") || *name != "user_auth_timeout")
+    // user_auth_timeout needs a secure lock screen and a device unlocked in the last 300 seconds,
+    // and auth_without_lock_screen needs a device without one.
+    .filter(|(name, _)| match *name {
+        "user_auth_timeout" => cfg!(feature = "user-auth-tests"),
+        "auth_without_lock_screen" => !cfg!(feature = "user-auth-tests"),
+        _ => true,
+    })
     .map(|(name, entry)| {
         (name, move || -> keyring_core::Result<()> {
             catch_unwind(entry)
@@ -483,13 +489,39 @@ fn oversized_auth_timeout() -> keyring_core::Result<()> {
         }
     }
     // The parser cannot construct this configuration for `Store::delete`.
-    let (vm, context) = crate::android_context()?;
-    let mut env = vm.attach_current_thread().expect("attach_current_thread");
-    let ctx = Context::from_raw(context);
-    let filename = format!("keyring-{name}");
-    ctx.delete_shared_preferences(&mut env, &filename)
-        .expect("delete_shared_preferences");
+    delete_store_file(&format!("keyring-{name}"));
     Ok(())
+}
+
+const NO_LOCK_CONFIG: [(&str, &str); 4] = [
+    ("name", "no-lock-test"),
+    ("divider", "@"),
+    ("user-auth-required", "true"),
+    ("user-auth-timeout", "30"),
+];
+
+fn auth_without_lock_screen() -> keyring_core::Result<()> {
+    let config = HashMap::from(NO_LOCK_CONFIG);
+    match crate::Store::new_with_configuration(&config) {
+        Err(keyring_core::Error::PlatformFailure(_)) => {}
+        r => {
+            return bad_result(
+                "new_with_configuration",
+                &format!("PlatformFailure without a secure lock screen, got {r:?}"),
+            );
+        }
+    }
+    // The failed key leaves a keyless file that `Store::delete` counts as absent.
+    delete_store_file("keyring-no-lock-test");
+    Ok(())
+}
+
+fn delete_store_file(filename: &str) {
+    let (vm, context) = crate::android_context().expect("android_context");
+    let mut env = vm.attach_current_thread().expect("attach_current_thread");
+    Context::from_raw(context)
+        .delete_shared_preferences(&mut env, filename)
+        .expect("delete_shared_preferences");
 }
 
 fn direct_invalid_divider() -> keyring_core::Result<()> {
