@@ -1,58 +1,20 @@
 use jni::{
     JNIEnv,
     objects::{GlobalRef, JByteArray, JObject, JValue, JValueGen},
-    signature::{Primitive, ReturnType},
 };
 
 #[derive(Clone, Copy)]
 pub enum SignatureComp {
     Class(ClassDecl),
     Boolean,
-    Byte,
-    Char,
-    Short,
     Int,
-    Long,
-    Float,
-    Double,
     Void,
-    ArrayBoolean,
     ArrayByte,
     ArrayChar,
-    ArrayShort,
-    ArrayInt,
-    ArrayLong,
-    ArrayFloat,
-    ArrayDouble,
 }
 impl From<ClassDecl> for SignatureComp {
     fn from(value: ClassDecl) -> Self {
         Self::Class(value)
-    }
-}
-impl From<SignatureComp> for ReturnType {
-    fn from(value: SignatureComp) -> Self {
-        match value {
-            SignatureComp::Class(class_decl) if class_decl.0.starts_with('[') => ReturnType::Array,
-            SignatureComp::Class(_) => ReturnType::Object,
-            SignatureComp::Boolean => ReturnType::Primitive(Primitive::Boolean),
-            SignatureComp::Byte => ReturnType::Primitive(Primitive::Byte),
-            SignatureComp::Char => ReturnType::Primitive(Primitive::Char),
-            SignatureComp::Short => ReturnType::Primitive(Primitive::Short),
-            SignatureComp::Int => ReturnType::Primitive(Primitive::Int),
-            SignatureComp::Long => ReturnType::Primitive(Primitive::Long),
-            SignatureComp::Float => ReturnType::Primitive(Primitive::Float),
-            SignatureComp::Double => ReturnType::Primitive(Primitive::Double),
-            SignatureComp::Void => ReturnType::Primitive(Primitive::Void),
-            SignatureComp::ArrayBoolean => ReturnType::Array,
-            SignatureComp::ArrayByte => ReturnType::Array,
-            SignatureComp::ArrayChar => ReturnType::Array,
-            SignatureComp::ArrayShort => ReturnType::Array,
-            SignatureComp::ArrayInt => ReturnType::Array,
-            SignatureComp::ArrayLong => ReturnType::Array,
-            SignatureComp::ArrayFloat => ReturnType::Array,
-            SignatureComp::ArrayDouble => ReturnType::Array,
-        }
     }
 }
 impl SignatureComp {
@@ -67,22 +29,10 @@ impl SignatureComp {
         match self {
             SignatureComp::Class(ClassDecl(class_decl)) => class_decl,
             SignatureComp::Boolean => "Z",
-            SignatureComp::Byte => "B",
-            SignatureComp::Char => "C",
-            SignatureComp::Short => "S",
             SignatureComp::Int => "I",
-            SignatureComp::Long => "J",
-            SignatureComp::Float => "F",
-            SignatureComp::Double => "D",
             SignatureComp::Void => "V",
-            SignatureComp::ArrayBoolean => "[Z",
             SignatureComp::ArrayByte => "[B",
             SignatureComp::ArrayChar => "[C",
-            SignatureComp::ArrayShort => "[S",
-            SignatureComp::ArrayInt => "[I",
-            SignatureComp::ArrayLong => "[J",
-            SignatureComp::ArrayFloat => "[F",
-            SignatureComp::ArrayDouble => "[D",
         }
     }
 }
@@ -371,10 +321,6 @@ impl FromValue for () {
 
     fn from_value(value: JValue) -> JResult<Self> {
         value.v()
-    }
-
-    fn from_null() -> JResult<Self> {
-        Ok(())
     }
 }
 impl FromValue for bool {
