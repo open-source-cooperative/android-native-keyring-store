@@ -16,7 +16,6 @@ exclude = ["keyring-tester"]
 crate-type = ["lib", "cdylib"]
 
 [features]
-legacy = []
 compile-tests = ["android_log-sys"]
 user-auth-tests = ["compile-tests"]
 android-log = ["android_log-sys", "tracing-subscriber/env-filter"]
@@ -43,4 +42,3 @@ undocumented_unsafe_blocks = "deny"
 
 [package.metadata.docs.rs]
 targets = ["aarch64-linux-android"]
-features = ["legacy"]

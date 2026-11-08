@@ -24,6 +24,6 @@ jobs:
         with:
           toolchain: stable
           target: aarch64-linux-android
-      - run: cargo doc --no-deps --target aarch64-linux-android --features legacy
+      - run: cargo doc --no-deps --target aarch64-linux-android
         env:
           RUSTDOCFLAGS: -D warnings -D missing_docs
