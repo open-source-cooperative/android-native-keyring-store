@@ -7,16 +7,11 @@ via a key kept in the Android KeyStore.
 
 ## Storage Conventions
 
-Clients provide a name for each credential store using the `name` configuration key (value
-`default` if not provided). The name of the store's SharedPreferences file (and the alias
-for that store's Keystore entry) are derived from the store name by prefixing it with
-`keyring-`. Clients can override this by specifying the filename directly with the
-`filename` configuration key.
+Clients provide a store name using the `name` configuration key, which defaults to `default`, and a SharedPreferences filename using `filename`, which defaults to `keyring-{name}`.
 
-Stores names are unique, so you can't create two stores with the same name
-(even if they use different configurations). Attempting to create the second
-one will fail. Similarly, store filenames are unique, so you can't create
-two differently named stores with the same filename.
+Store names are unique within an application storage domain, even when callers supply different application-context objects for that domain.
+
+A store's filename is also its Keystore alias in both credential-protected and device-protected storage, so one filename names one store per application. Creating a store whose filename is already taken in the other storage domain fails with [BadStoreFormat](keyring_core::Error::BadStoreFormat).
 
 Inside the store's SharedPreferences file, an entry's credential is identified by the
 concatenation of the entry's user and service names with a store-specific divider string.

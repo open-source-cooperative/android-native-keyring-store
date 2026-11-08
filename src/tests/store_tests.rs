@@ -6,11 +6,15 @@ use android_log_sys::LogPriority;
 use keyring_core::{Entry, api::CredentialStoreApi};
 
 use super::bad_result;
-use crate::shared_preferences::Context;
+use crate::shared_preferences::delete_shared_preferences;
 
 pub fn run_tests() -> (usize, usize) {
     let testing = [
-        ("setup", setup as fn() -> keyring_core::Result<()>),
+        (
+            "explicit_context",
+            super::context_tests::after_activity as fn() -> keyring_core::Result<()>,
+        ),
+        ("setup", setup),
         ("repeated_access", repeated_access),
         ("golden_path", golden_path),
         ("delete_credential", delete_credential),
@@ -27,6 +31,7 @@ pub fn run_tests() -> (usize, usize) {
         ("default_store", default_store),
         ("oversized_auth_timeout", oversized_auth_timeout),
         ("direct_invalid_divider", direct_invalid_divider),
+        ("path_separator_filename", path_separator_filename),
     ]
     .iter()
     // user_auth_timeout needs a secure lock screen and a device unlocked in the last 300 seconds,
@@ -517,11 +522,28 @@ fn auth_without_lock_screen() -> keyring_core::Result<()> {
 }
 
 fn delete_store_file(filename: &str) {
-    let (vm, context) = crate::android_context().expect("android_context");
-    let mut env = vm.attach_current_thread().expect("attach_current_thread");
-    Context::from_raw(context)
-        .delete_shared_preferences(&mut env, filename)
+    let context = crate::android_context().expect("android_context");
+    let mut env = context
+        .inner
+        .vm
+        .attach_current_thread()
+        .expect("attach_current_thread");
+    delete_shared_preferences(context.inner.reference.as_obj(), &mut env, filename)
         .expect("delete_shared_preferences");
+}
+
+fn path_separator_filename() -> keyring_core::Result<()> {
+    let config = HashMap::from([
+        ("name", "separator-test"),
+        ("filename", "keyring/separator"),
+    ]);
+    match crate::Store::new_with_configuration(&config) {
+        Err(keyring_core::Error::PlatformFailure(_)) => Ok(()),
+        r => bad_result(
+            "new_with_configuration",
+            &format!("PlatformFailure for a filename with a path separator, got {r:?}"),
+        ),
+    }
 }
 
 fn direct_invalid_divider() -> keyring_core::Result<()> {

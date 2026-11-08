@@ -6,6 +6,7 @@ use keyring_core::Result;
 
 use crate::{by_store::clear_vault_list, shared_preferences::Context};
 
+mod context_tests;
 mod crypto_tests;
 pub mod store_tests;
 mod unlock_tests;
@@ -83,6 +84,7 @@ pub fn bad_result(op: &str, msg: &str) -> Result<()> {
 pub fn cleanup() -> Result<()> {
     clear_vault_list();
     store_tests::cleanup()?;
+    context_tests::cleanup()?;
     crypto_tests::cleanup()?;
     unlock_tests::cleanup()?;
     Ok(())
