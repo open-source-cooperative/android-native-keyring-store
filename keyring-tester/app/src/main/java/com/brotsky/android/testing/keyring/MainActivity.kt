@@ -16,6 +16,9 @@ import io.crates.keyring.KeyringTests
 import javax.crypto.Cipher
 
 class MainActivity : AppCompatActivity() {
+    private var prompts = 0
+    private var unlockStarted = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // Read by a coverage build of the library when it loads.
@@ -42,7 +45,15 @@ class MainActivity : AppCompatActivity() {
             v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
             insets
         }
-        runUnlockTests()
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        // SystemUI cancels a prompt whose app is not yet the top task, which onCreate can still be.
+        if (hasFocus && !unlockStarted) {
+            unlockStarted = true
+            runUnlockTests()
+        }
     }
 
     private fun runUnlockTests() {
@@ -72,6 +83,9 @@ class MainActivity : AppCompatActivity() {
                 Log.e("unit-test", "gated prompt error $errorCode: $errString")
             }
         }
+        prompts += 1
+        // The coverage run waits for this line to type the test PIN into the prompt.
+        Log.i("unit-test", "Unlock prompt $prompts shown")
         prompt.authenticate(BiometricPrompt.CryptoObject(cipher), CancellationSignal(), mainExecutor, callback)
     }
 }
