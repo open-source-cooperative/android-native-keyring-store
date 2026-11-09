@@ -1,7 +1,5 @@
 use std::collections::HashMap;
-use std::panic::catch_unwind;
 
-use android_log_sys::LogPriority;
 use jni::{
     JNIEnv, JavaVM,
     errors::Error as JavaError,
@@ -36,48 +34,13 @@ pub(crate) fn run_tests(env: JNIEnv, context: Context) -> (usize, usize) {
         ("jni_static_frames", jni_static_frames),
         ("jni_constructor_frames", jni_constructor_frames),
         ("teardown", teardown),
-    ]
-    .iter()
-    .map(|(name, entry)| {
+    ];
+    let tests = testing.map(|(name, entry)| {
         let java_vm = env.get_java_vm().unwrap();
         let context = context.clone();
-        (name, move || -> keyring_core::Result<()> {
-            catch_unwind(move || entry(java_vm, context))
-                .map_err(|e| {
-                    log::error!("Test {name} panicked: {e:?}");
-                    bad_result(name, "panicked")
-                })
-                .unwrap_or_else(|e| e)
-        })
-    })
-    .collect::<Vec<_>>();
-
-    super::report(LogPriority::INFO, "Running shared crypto tests...");
-    let mut successes = 0;
-    let mut failures = 0;
-    for (name, testing) in testing {
-        let level;
-        let msg;
-        match testing() {
-            Ok(()) => {
-                level = LogPriority::INFO;
-                msg = format!("{name} success");
-                successes += 1;
-            }
-            Err(e) => {
-                level = LogPriority::ERROR;
-                msg = format!("{name} error: {e:?}");
-                failures += 1;
-            }
-        }
-
-        super::report(level, &msg);
-    }
-    super::report(
-        LogPriority::INFO,
-        &format!("Crypto: {} successes, {} failures", successes, failures),
-    );
-    (successes, failures)
+        (name, move || entry(java_vm, context))
+    });
+    super::run_suite("Crypto", tests)
 }
 
 const STORE_CONFIG: [(&str, &str); 3] = [
