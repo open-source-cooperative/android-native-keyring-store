@@ -6,23 +6,23 @@ use jni::{
 };
 use std::marker::PhantomData;
 
-pub const MODE_PRIVATE: i32 = 0;
+pub(crate) const MODE_PRIVATE: i32 = 0;
 
 #[cfg(feature = "compile-tests")]
 #[derive(Clone)]
-pub struct Context {
+pub(crate) struct Context {
     self_: GlobalRef,
 }
 
 #[cfg(feature = "compile-tests")]
 impl Context {
-    pub fn new(env: &JNIEnv, obj: JObject) -> JResult<Self> {
+    pub(crate) fn new(env: &JNIEnv, obj: JObject) -> JResult<Self> {
         Ok(Self {
             self_: env.new_global_ref(obj)?,
         })
     }
 
-    pub fn get_shared_preferences(
+    pub(crate) fn get_shared_preferences(
         &self,
         env: &mut JNIEnv,
         name: &str,
@@ -32,7 +32,7 @@ impl Context {
     }
 }
 
-pub fn get_shared_preferences(
+pub(crate) fn get_shared_preferences(
     context: &JObject,
     env: &mut JNIEnv,
     name: &str,
@@ -49,7 +49,11 @@ pub fn get_shared_preferences(
     ThisMethod::call(context, env, (name, mode))
 }
 
-pub fn delete_shared_preferences(context: &JObject, env: &mut JNIEnv, name: &str) -> JResult<bool> {
+pub(crate) fn delete_shared_preferences(
+    context: &JObject,
+    env: &mut JNIEnv,
+    name: &str,
+) -> JResult<bool> {
     struct ThisMethod<'a>(PhantomData<&'a ()>);
     impl<'a> Method for ThisMethod<'a> {
         type Param = &'a str;

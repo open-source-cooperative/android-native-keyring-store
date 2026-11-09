@@ -21,7 +21,7 @@ const CONFIG: [(&str, &str); 4] = [
 static TALLY: Mutex<(usize, usize)> = Mutex::new((0, 0));
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_io_crates_keyring_KeyringTests_00024Companion_unlockTestsStart(
+extern "system" fn Java_io_crates_keyring_KeyringTests_00024Companion_unlockTestsStart(
     env: JNIEnv,
     _class: JObject,
 ) -> jobject {
@@ -43,7 +43,7 @@ pub extern "system" fn Java_io_crates_keyring_KeyringTests_00024Companion_unlock
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_io_crates_keyring_KeyringTests_00024Companion_unlockTestsFirst(
+extern "system" fn Java_io_crates_keyring_KeyringTests_00024Companion_unlockTestsFirst(
     env: JNIEnv,
     _class: JObject,
     cipher: JObject,
@@ -69,7 +69,7 @@ pub extern "system" fn Java_io_crates_keyring_KeyringTests_00024Companion_unlock
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_io_crates_keyring_KeyringTests_00024Companion_unlockTestsSecond(
+extern "system" fn Java_io_crates_keyring_KeyringTests_00024Companion_unlockTestsSecond(
     env: JNIEnv,
     _class: JObject,
     cipher: JObject,
@@ -92,7 +92,7 @@ pub extern "system" fn Java_io_crates_keyring_KeyringTests_00024Companion_unlock
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_io_crates_keyring_KeyringTests_00024Companion_unlockTestsThird(
+extern "system" fn Java_io_crates_keyring_KeyringTests_00024Companion_unlockTestsThird(
     _env: JNIEnv,
     _class: JObject,
     cipher: JObject,
@@ -110,7 +110,7 @@ pub extern "system" fn Java_io_crates_keyring_KeyringTests_00024Companion_unlock
     );
 }
 
-pub fn cleanup() -> Result<()> {
+pub(crate) fn cleanup() -> Result<()> {
     crate::by_store::clear_vault_list();
     Store::delete(&HashMap::from(CONFIG))?;
     Ok(())

@@ -21,7 +21,7 @@ const DEVICE_CONFIG: [(&str, &str); 1] = [("name", "explicit-device-test")];
 
 #[allow(non_snake_case)]
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_io_crates_keyring_KeyringTests_00024Companion_runContextTestsWithInvalidContexts(
+extern "system" fn Java_io_crates_keyring_KeyringTests_00024Companion_runContextTestsWithInvalidContexts(
     mut env: JNIEnv,
     _class: JObject,
     context: JObject,
@@ -220,7 +220,7 @@ fn authentication(context: &AndroidContext) -> Result<()> {
     Ok(())
 }
 
-pub fn after_activity() -> Result<()> {
+pub(crate) fn after_activity() -> Result<()> {
     {
         let global = Store::new_with_configuration(&HashMap::from(CONFIG))?;
         let explicit = store(crate::android_context()?)?;
@@ -238,6 +238,6 @@ pub fn after_activity() -> Result<()> {
     Ok(())
 }
 
-pub fn cleanup() -> Result<()> {
+pub(crate) fn cleanup() -> Result<()> {
     Store::delete(&HashMap::from(CONFIG)).map(|_| ())
 }
