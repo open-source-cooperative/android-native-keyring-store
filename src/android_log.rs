@@ -95,17 +95,9 @@ impl SpanPrefix {
     {
         let span = ctx.span(id).expect("Span not found, this is a bug");
         let mut extensions = span.extensions_mut();
-        match extensions.get_mut::<SpanPrefix>() {
-            Some(prefix) => {
-                prefix.name = attrs.metadata().name().to_string();
-                attrs.record(&mut prefix.visit());
-            }
-            None => {
-                let mut prefix = SpanPrefix::new(span.name().to_string());
-                attrs.record(&mut prefix.visit());
-                extensions.insert(prefix)
-            }
-        }
+        let mut prefix = SpanPrefix::new(span.name().to_string());
+        attrs.record(&mut prefix.visit());
+        extensions.insert(prefix);
     }
 
     fn on_record<S>(
@@ -117,16 +109,10 @@ impl SpanPrefix {
     {
         let span = ctx.span(id).expect("Span not found, this is a bug");
         let mut extensions = span.extensions_mut();
-        match extensions.get_mut::<SpanPrefix>() {
-            Some(prefix) => {
-                values.record(&mut prefix.visit());
-            }
-            None => {
-                let mut prefix = SpanPrefix::new(span.name().to_string());
-                values.record(&mut prefix.visit());
-                extensions.insert(prefix)
-            }
-        }
+        let prefix = extensions
+            .get_mut::<SpanPrefix>()
+            .expect("on_new_span stores the prefix");
+        values.record(&mut prefix.visit());
     }
 
     fn on_event<S>(
@@ -139,9 +125,11 @@ impl SpanPrefix {
         let mut message = String::new();
         if let Some(scope) = ctx.event_scope(event) {
             for span in scope.from_root() {
-                if let Some(prefix) = span.extensions().get::<SpanPrefix>() {
-                    write!(message, "{prefix}").unwrap();
-                }
+                let extensions = span.extensions();
+                let prefix = extensions
+                    .get::<SpanPrefix>()
+                    .expect("on_new_span stores the prefix");
+                write!(message, "{prefix}").unwrap();
             }
         };
         if !message.is_empty() {
