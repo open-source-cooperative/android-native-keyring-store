@@ -8,6 +8,8 @@ use crate::{by_store::clear_vault_list, shared_preferences::Context};
 
 mod context_tests;
 mod crypto_tests;
+#[cfg(feature = "android-log")]
+mod log_tests;
 pub mod store_tests;
 mod unlock_tests;
 
