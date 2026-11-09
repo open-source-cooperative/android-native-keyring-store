@@ -125,15 +125,6 @@ impl FromValue for GCMParameterSpec {
         Ok(Self { self_ })
     }
 }
-impl ToValue for GCMParameterSpec {
-    fn signature() -> SignatureComp {
-        Self::class().into()
-    }
-
-    fn to_value<'a>(&self, env: &mut JNIEnv<'a>) -> JResult<JValueGen<JObject<'a>>> {
-        Ok(env.new_local_ref(self.self_.as_obj())?.into())
-    }
-}
 impl GCMParameterSpec {
     fn class() -> ClassDecl {
         ClassDecl("Ljavax/crypto/spec/GCMParameterSpec;")
