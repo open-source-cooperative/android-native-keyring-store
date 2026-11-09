@@ -8,7 +8,7 @@ use jni::{
 use crate::{
     methods::{
         ClassDecl, Constructible, FromValue, JResult, Method, NoParam, SignatureComp, StaticMethod,
-        ToValue,
+        ToValue, get_instance,
     },
     throwable::Throwable,
 };
@@ -42,15 +42,7 @@ impl KeyStore {
     }
 
     pub(crate) fn get_instance(env: &mut JNIEnv<'_>, store: &str) -> JResult<KeyStore> {
-        struct ThisMethod<'a>(PhantomData<&'a ()>);
-        impl<'a> StaticMethod for ThisMethod<'a> {
-            type Param = &'a str;
-            type Return = KeyStore;
-
-            const NAME: &'static str = "getInstance";
-        }
-
-        ThisMethod::call(Self::class(), env, store)
+        get_instance(Self::class(), env, store)
     }
 
     pub(crate) fn load(&self, env: &mut JNIEnv<'_>) -> JResult<()> {
@@ -251,15 +243,7 @@ impl KeyGenerator {
 
     /// A generator of software keys, from the default provider.
     pub(crate) fn get_default_instance(env: &mut JNIEnv, algorithm: &str) -> JResult<Self> {
-        struct ThisMethod<'a>(PhantomData<&'a ()>);
-        impl<'a> StaticMethod for ThisMethod<'a> {
-            type Param = &'a str;
-            type Return = KeyGenerator;
-
-            const NAME: &'static str = "getInstance";
-        }
-
-        ThisMethod::call(Self::class(), env, algorithm)
+        get_instance(Self::class(), env, algorithm)
     }
 
     pub(crate) fn init_key_size(&self, env: &mut JNIEnv, bits: i32) -> JResult<()> {

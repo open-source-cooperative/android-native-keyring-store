@@ -1,6 +1,7 @@
 use android_log_sys::LogPriority;
 use jni::{JNIEnv, objects::JObject};
 use std::ffi::CString;
+use std::panic::{UnwindSafe, catch_unwind};
 
 use keyring_core::Result;
 
@@ -79,6 +80,37 @@ pub fn bad_result(op: &str, msg: &str) -> Result<()> {
         op.to_string(),
         format!("should have returned {msg}"),
     ))
+}
+
+/// Runs each named test, counting a panic as a failure, and reports the results under `suite`.
+fn run_suite<'a, F>(suite: &str, tests: impl IntoIterator<Item = (&'a str, F)>) -> (usize, usize)
+where
+    F: FnOnce() -> Result<()> + UnwindSafe,
+{
+    report(LogPriority::INFO, &format!("Running {suite} tests..."));
+    let mut successes = 0;
+    let mut failures = 0;
+    for (name, test) in tests {
+        let result = catch_unwind(test).unwrap_or_else(|e| {
+            log::error!("Test {name} panicked: {e:?}");
+            bad_result(name, "panicked")
+        });
+        match result {
+            Ok(()) => {
+                report(LogPriority::INFO, &format!("{name} success"));
+                successes += 1;
+            }
+            Err(e) => {
+                report(LogPriority::ERROR, &format!("{name} error: {e:?}"));
+                failures += 1;
+            }
+        }
+    }
+    report(
+        LogPriority::INFO,
+        &format!("{suite}: {successes} successes, {failures} failures"),
+    );
+    (successes, failures)
 }
 
 pub fn cleanup() -> Result<()> {
