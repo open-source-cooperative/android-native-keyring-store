@@ -20,7 +20,7 @@ use crate::{
     throwable::Throwable,
 };
 
-pub fn run_tests(env: JNIEnv, context: Context) -> (usize, usize) {
+pub(crate) fn run_tests(env: JNIEnv, context: Context) -> (usize, usize) {
     let testing = [
         (
             "setup",
@@ -100,7 +100,7 @@ fn teardown(_vm: JavaVM, _context: Context) -> keyring_core::Result<()> {
     Ok(())
 }
 
-pub fn cleanup() -> keyring_core::Result<()> {
+pub(crate) fn cleanup() -> keyring_core::Result<()> {
     // make sure there's nothing left from prior runs, and test store deletion
     // let store_config = HashMap::from([("name", "crypto-test"), ("filename", "crypto-test")]);
     let store_config = HashMap::from(STORE_CONFIG);

@@ -3,7 +3,7 @@ use jni::{JNIEnv, objects::GlobalRef};
 use crate::methods::{ClassDecl, FromValue, JResult, Method, NoParam, SignatureComp};
 
 /// A Java exception taken from the JNI environment.
-pub struct Throwable {
+pub(crate) struct Throwable {
     self_: GlobalRef,
 }
 
@@ -23,7 +23,7 @@ impl Throwable {
     }
 
     /// Describes and clears the pending exception, if any, and returns it.
-    pub fn take_pending(env: &mut JNIEnv) -> JResult<Option<Self>> {
+    pub(crate) fn take_pending(env: &mut JNIEnv) -> JResult<Option<Self>> {
         if !env.exception_check()? {
             return Ok(None);
         }
@@ -35,11 +35,11 @@ impl Throwable {
         }))
     }
 
-    pub fn is_instance_of(&self, env: &mut JNIEnv, class: ClassDecl) -> JResult<bool> {
+    pub(crate) fn is_instance_of(&self, env: &mut JNIEnv, class: ClassDecl) -> JResult<bool> {
         env.is_instance_of(&self.self_, class.for_finding())
     }
 
-    pub fn get_cause(&self, env: &mut JNIEnv) -> JResult<Option<Throwable>> {
+    pub(crate) fn get_cause(&self, env: &mut JNIEnv) -> JResult<Option<Throwable>> {
         struct ThisMethod;
         impl Method for ThisMethod {
             type Param = NoParam;
@@ -51,7 +51,7 @@ impl Throwable {
         ThisMethod::call(&self.self_, env, NoParam)
     }
 
-    pub fn get_message(&self, env: &mut JNIEnv) -> JResult<Option<String>> {
+    pub(crate) fn get_message(&self, env: &mut JNIEnv) -> JResult<Option<String>> {
         struct ThisMethod;
         impl Method for ThisMethod {
             type Param = NoParam;

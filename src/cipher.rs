@@ -11,7 +11,7 @@ use jni::{
 };
 use std::marker::PhantomData;
 
-pub struct Cipher {
+pub(crate) struct Cipher {
     self_: GlobalRef,
 }
 impl FromValue for Cipher {
@@ -28,11 +28,11 @@ impl Cipher {
         ClassDecl("Ljavax/crypto/Cipher;")
     }
 
-    pub fn object(&self) -> &GlobalRef {
+    pub(crate) fn object(&self) -> &GlobalRef {
         &self.self_
     }
 
-    pub fn get_instance(env: &mut JNIEnv, transformation: &str) -> JResult<Self> {
+    pub(crate) fn get_instance(env: &mut JNIEnv, transformation: &str) -> JResult<Self> {
         struct ThisMethod<'a>(PhantomData<&'a ()>);
         impl<'a> StaticMethod for ThisMethod<'a> {
             type Param = &'a str;
@@ -43,7 +43,7 @@ impl Cipher {
         ThisMethod::call(Self::class(), env, transformation)
     }
 
-    pub fn init(&self, env: &mut JNIEnv, mode: i32, key: &Key) -> JResult<()> {
+    pub(crate) fn init(&self, env: &mut JNIEnv, mode: i32, key: &Key) -> JResult<()> {
         struct ThisMethod<'a>(PhantomData<&'a ()>);
         impl<'a> Method for ThisMethod<'a> {
             type Param = (i32, &'a Key);
@@ -55,7 +55,7 @@ impl Cipher {
         ThisMethod::call(&self.self_, env, (mode, key))
     }
 
-    pub fn init2(
+    pub(crate) fn init2(
         &self,
         env: &mut JNIEnv,
         mode: i32,
@@ -72,7 +72,7 @@ impl Cipher {
         ThisMethod::call(&self.self_, env, (mode, key, spec))
     }
 
-    pub fn get_iv(&self, env: &mut JNIEnv) -> JResult<Vec<u8>> {
+    pub(crate) fn get_iv(&self, env: &mut JNIEnv) -> JResult<Vec<u8>> {
         struct ThisMethod;
         impl Method for ThisMethod {
             type Param = NoParam;
@@ -83,7 +83,7 @@ impl Cipher {
         ThisMethod::call(&self.self_, env, NoParam)
     }
 
-    pub fn do_final(&self, env: &mut JNIEnv, input: &[u8]) -> JResult<Vec<u8>> {
+    pub(crate) fn do_final(&self, env: &mut JNIEnv, input: &[u8]) -> JResult<Vec<u8>> {
         struct ThisMethod<'a>(PhantomData<&'a ()>);
         impl<'a> Method for ThisMethod<'a> {
             type Param = &'a [u8];
@@ -95,7 +95,7 @@ impl Cipher {
     }
 }
 
-pub struct AlgorithmParameterSpec {
+pub(crate) struct AlgorithmParameterSpec {
     self_: GlobalRef,
 }
 impl ToValue for AlgorithmParameterSpec {
@@ -113,7 +113,7 @@ impl AlgorithmParameterSpec {
     }
 }
 
-pub struct GCMParameterSpec {
+pub(crate) struct GCMParameterSpec {
     self_: GlobalRef,
 }
 impl FromValue for GCMParameterSpec {
@@ -139,7 +139,7 @@ impl GCMParameterSpec {
         ClassDecl("Ljavax/crypto/spec/GCMParameterSpec;")
     }
 
-    pub fn new(env: &mut JNIEnv, tag_len: i32, iv: &[u8]) -> JResult<GCMParameterSpec> {
+    pub(crate) fn new(env: &mut JNIEnv, tag_len: i32, iv: &[u8]) -> JResult<GCMParameterSpec> {
         struct ThisMethod<'a>(PhantomData<&'a ()>);
         impl<'a> Constructible for ThisMethod<'a> {
             type Param = (i32, &'a [u8]);
