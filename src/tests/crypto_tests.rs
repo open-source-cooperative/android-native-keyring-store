@@ -11,8 +11,9 @@ use keyring_core::{Entry, get_default_store};
 use super::bad_result;
 
 use crate::{
+    crypto::{decrypt, encrypt},
     error::CorruptedData,
-    keystore::{KeyStore, is_expired_timeout},
+    keystore::{KEY_ALGORITHM_AES, Key, KeyGenerator, KeyStore, SecretKeySpec, is_expired_timeout},
     methods::{ClassDecl, Constructible, JResult, Method},
     shared_preferences::{Context, MODE_PRIVATE},
     throwable::Throwable,
@@ -29,6 +30,7 @@ pub(crate) fn run_tests(env: JNIEnv, context: Context) -> (usize, usize) {
         ("invalid_iv", invalid_iv),
         ("malformed_base64", malformed_base64),
         ("decryption_failure", decryption_failure),
+        ("software_data_key", software_data_key),
         ("expired_timeout_inspection", expired_timeout_inspection),
         ("jni_instance_frames", jni_instance_frames),
         ("jni_static_frames", jni_static_frames),
@@ -248,6 +250,36 @@ fn thrown(env: &mut JNIEnv, class: &str, cause: Option<&JObject>) -> Throwable {
     .unwrap();
     env.throw(JThrowable::from(exception)).unwrap();
     Throwable::take_pending(env).unwrap().unwrap()
+}
+
+/// The software key that seals a store's data, which must leave its provider as raw bytes.
+fn software_data_key(vm: JavaVM, _ctx: Context) -> keyring_core::Result<()> {
+    let mut env = vm.attach_current_thread().unwrap();
+    let generator = KeyGenerator::get_default_instance(&mut env, KEY_ALGORITHM_AES).unwrap();
+    generator.init_key_size(&mut env, 256).unwrap();
+    let mut encoded = || {
+        let key = generator.generate_key(&mut env).unwrap();
+        key.get_encoded(&mut env).unwrap()
+    };
+    let (first, second) = (encoded(), encoded());
+    if first.len() != 32 || second.len() != 32 || first == second {
+        return bad_result(
+            "generate_key",
+            &format!(
+                "two distinct 32-byte keys, got {} and {} bytes",
+                first.len(),
+                second.len()
+            ),
+        );
+    }
+    let mut rebuilt =
+        || Key::from(SecretKeySpec::new(&mut env, &first, KEY_ALGORITHM_AES).unwrap());
+    let (sealing, opening) = (rebuilt(), rebuilt());
+    let sealed = encrypt(&mut env, sealing, b"notification key")?;
+    match decrypt(&mut env, opening, sealed)? {
+        opened if opened == b"notification key" => Ok(()),
+        opened => bad_result("decrypt", &format!("the sealed bytes, got {opened:?}")),
+    }
 }
 
 fn expired_timeout_inspection(vm: JavaVM, _ctx: Context) -> keyring_core::Result<()> {
