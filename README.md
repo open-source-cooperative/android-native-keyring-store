@@ -4,6 +4,8 @@
 
 This crate provides storage and management of Keyring credentials in Android's native `SharedPreferences` store, securing all passwords and secrets using encryption via credentials in Android’s native Keystore. Once this library has been loaded and initialized (as described below) by your Android-native application, other Rust code linked into your application can use this credential store.
 
+It runs on Android 7 (API 24) and later. Stores that require user authentication need Android 11 (API 30).
+
 ## Usage
 
 For a background callback, create an `AndroidContext` with JNI 0.21's `AndroidContext::new(&mut env, &context)` and pass it by value to `Store::new_with_context(context, config)`. Use `context.clone()` when deliberately sharing ownership, and borrow `&context` for `Store::exists_with_context` and `Store::delete_with_context`. The store retains the application context and preserves credential/device-protected storage without accessing `ndk-context`.

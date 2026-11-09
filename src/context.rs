@@ -43,13 +43,9 @@ impl AndroidContext {
                     Error::Invalid("context".into(), "must be an Android context".into()).into(),
                 );
             }
-            let sdk = env
-                .get_static_field("android/os/Build$VERSION", "SDK_INT", "I")?
-                .i()?;
-            let device_protected = sdk >= 24
-                && env
-                    .call_method(context, "isDeviceProtectedStorage", "()Z", &[])?
-                    .z()?;
+            let device_protected = env
+                .call_method(context, "isDeviceProtectedStorage", "()Z", &[])?
+                .z()?;
             let application = env
                 .call_method(
                     context,
@@ -63,19 +59,16 @@ impl AndroidContext {
                     Error::Invalid("context".into(), "has no application context".into()).into(),
                 );
             }
-            let application = if sdk >= 24 {
-                let method = if device_protected {
-                    "createDeviceProtectedStorageContext"
-                } else {
-                    "createCredentialProtectedStorageContext"
-                };
-                env.call_method(&application, method, "()Landroid/content/Context;", &[])?
-                    .l()?
+            let method = if device_protected {
+                "createDeviceProtectedStorageContext"
             } else {
-                application
+                "createCredentialProtectedStorageContext"
             };
-            let storage_id = data_directory(env, &application, sdk)?;
-            if storage_id != data_directory(env, context, sdk)? {
+            let application = env
+                .call_method(&application, method, "()Landroid/content/Context;", &[])?
+                .l()?;
+            let storage_id = data_directory(env, &application)?;
+            if storage_id != data_directory(env, context)? {
                 return Err(Error::Invalid(
                     "context".into(),
                     "does not use its application's storage domain".into(),
@@ -100,22 +93,10 @@ impl AndroidContext {
     }
 }
 
-fn data_directory(env: &mut JNIEnv, context: &JObject, sdk: i32) -> AndroidKeyringResult<String> {
-    let directory = if sdk >= 24 {
-        env.call_method(context, "getDataDir", "()Ljava/io/File;", &[])?
-            .l()?
-    } else {
-        let info = env
-            .call_method(
-                context,
-                "getApplicationInfo",
-                "()Landroid/content/pm/ApplicationInfo;",
-                &[],
-            )?
-            .l()?;
-        let path = env.get_field(info, "dataDir", "Ljava/lang/String;")?.l()?;
-        env.new_object("java/io/File", "(Ljava/lang/String;)V", &[(&path).into()])?
-    };
+fn data_directory(env: &mut JNIEnv, context: &JObject) -> AndroidKeyringResult<String> {
+    let directory = env
+        .call_method(context, "getDataDir", "()Ljava/io/File;", &[])?
+        .l()?;
     let path = JString::from(
         env.call_method(directory, "getCanonicalPath", "()Ljava/lang/String;", &[])?
             .l()?,
