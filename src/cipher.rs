@@ -1,8 +1,8 @@
 use crate::{
     keystore::Key,
     methods::{
-        ClassDecl, Constructible, FromValue, JResult, Method, NoParam, SignatureComp, StaticMethod,
-        ToValue,
+        ClassDecl, Constructible, FromValue, JResult, Method, NoParam, SignatureComp, ToValue,
+        get_instance,
     },
 };
 use jni::{
@@ -33,14 +33,7 @@ impl Cipher {
     }
 
     pub(crate) fn get_instance(env: &mut JNIEnv, transformation: &str) -> JResult<Self> {
-        struct ThisMethod<'a>(PhantomData<&'a ()>);
-        impl<'a> StaticMethod for ThisMethod<'a> {
-            type Param = &'a str;
-            type Return = Cipher;
-
-            const NAME: &'static str = "getInstance";
-        }
-        ThisMethod::call(Self::class(), env, transformation)
+        get_instance(Self::class(), env, transformation)
     }
 
     pub(crate) fn init(&self, env: &mut JNIEnv, mode: i32, key: &Key) -> JResult<()> {
