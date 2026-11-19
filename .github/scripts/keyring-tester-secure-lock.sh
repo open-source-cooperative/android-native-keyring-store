@@ -46,14 +46,30 @@ device shell locksettings set-pin "$pin"
 owned=1
 device shell locksettings verify --old "$pin"
 
-# Authenticate after configuring the credential and before starting the service.
+# Reads the whole dump, since `grep -q` would stop early and fail the pipe under pipefail.
+keyguard_showing() {
+  device shell dumpsys activity activities | grep 'mKeyguardShowing=true' > /dev/null
+}
+
+# Authenticate after configuring the credential and before starting the service. A slow
+# emulator can miss the PIN while the keyguard is still coming up, so retry until it is gone.
 device shell input keyevent 26
 sleep 1
 device shell input keyevent 26
 sleep 1
-device shell input text "$pin"
-device shell input keyevent 66
-device shell wm dismiss-keyguard
+for _ in 1 2 3 4 5; do
+  keyguard_showing || break
+  device shell input keyevent 224
+  device shell wm dismiss-keyguard
+  sleep 2
+  device shell input text "$pin"
+  device shell input keyevent 66
+  sleep 2
+done
+if keyguard_showing; then
+  echo "the keyguard is still showing after entering the test PIN" >&2
+  exit 1
+fi
 device shell svc power stayon true
 stayon=1
 

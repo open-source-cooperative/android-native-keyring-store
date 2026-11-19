@@ -103,6 +103,10 @@ extern "system" fn Java_io_crates_keyring_KeyringTests_00024Companion_unlockTest
         expect_password(&store()?)
     });
     run("unlock_teardown", cleanup);
+    // The profile written after the other suites predates these tests, and the summary below
+    // tells the coverage run that this second one is complete.
+    #[cfg(keyring_coverage)]
+    super::write_coverage_profile();
     let (successes, failures) = *TALLY.lock().unwrap();
     report(
         LogPriority::INFO,
