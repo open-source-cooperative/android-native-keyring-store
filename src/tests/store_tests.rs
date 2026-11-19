@@ -29,6 +29,8 @@ pub fn run_tests() -> (usize, usize) {
         ("oversized_auth_timeout", oversized_auth_timeout),
         ("direct_invalid_divider", direct_invalid_divider),
         ("path_separator_filename", path_separator_filename),
+        #[cfg(feature = "android-log")]
+        ("logcat_routing", super::log_tests::logcat_routing),
     ];
     // user_auth_timeout needs a secure lock screen and a device unlocked in the last 300 seconds,
     // and auth_without_lock_screen needs a device without one.
