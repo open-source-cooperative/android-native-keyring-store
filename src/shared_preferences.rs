@@ -1,8 +1,8 @@
-use crate::methods::{ClassDecl, FromValue, JResult, Method, NoParam, SignatureComp};
+use crate::methods::{ClassDecl, FromValue, JResult, Method, NoParam, SignatureComp, ToValue};
 use base64::{Engine, prelude::BASE64_STANDARD};
 use jni::{
     JNIEnv,
-    objects::{AutoLocal, GlobalRef, JMap, JObject, JString},
+    objects::{AutoLocal, GlobalRef, JMap, JObject, JString, JValueGen},
 };
 use std::marker::PhantomData;
 
@@ -65,7 +65,7 @@ pub(crate) fn delete_shared_preferences(
     ThisMethod::call(context, env, name)
 }
 
-pub struct SharedPreferences {
+pub(crate) struct SharedPreferences {
     self_: GlobalRef,
 }
 
@@ -84,7 +84,7 @@ impl SharedPreferences {
         ClassDecl("Landroid/content/SharedPreferences;")
     }
 
-    pub fn get_all(&self, env: &mut JNIEnv) -> JResult<SharedPreferencesKeys> {
+    pub(crate) fn get_all(&self, env: &mut JNIEnv) -> JResult<SharedPreferencesKeys> {
         struct ThisMethod;
         impl Method for ThisMethod {
             type Param = NoParam;
@@ -95,7 +95,7 @@ impl SharedPreferences {
         ThisMethod::call(&self.self_, env, NoParam)
     }
 
-    pub fn contains(&self, env: &mut JNIEnv, key: &str) -> JResult<bool> {
+    pub(crate) fn contains(&self, env: &mut JNIEnv, key: &str) -> JResult<bool> {
         struct ThisMethod<'a>(PhantomData<&'a ()>);
         impl<'a> Method for ThisMethod<'a> {
             type Param = &'a str;
@@ -106,18 +106,30 @@ impl SharedPreferences {
         ThisMethod::call(&self.self_, env, key)
     }
 
-    pub fn get_string(&self, env: &mut JNIEnv, key: &str) -> JResult<Option<String>> {
+    pub(crate) fn get_string(&self, env: &mut JNIEnv, key: &str) -> JResult<Option<String>> {
+        /// The `null` default `getString` returns for a missing key.
+        struct NoDefault;
+        impl ToValue for NoDefault {
+            fn signature() -> SignatureComp {
+                <&str as ToValue>::signature()
+            }
+
+            fn to_value<'a>(&self, _env: &mut JNIEnv<'a>) -> JResult<JValueGen<JObject<'a>>> {
+                Ok(JObject::null().into())
+            }
+        }
+
         struct ThisMethod<'a>(PhantomData<&'a ()>);
         impl<'a> Method for ThisMethod<'a> {
-            type Param = (&'a str, Option<&'a str>);
+            type Param = (&'a str, NoDefault);
             type Return = Option<String>;
 
             const NAME: &'static str = "getString";
         }
-        ThisMethod::call(&self.self_, env, (key, None))
+        ThisMethod::call(&self.self_, env, (key, NoDefault))
     }
 
-    pub fn get_binary(&self, env: &mut JNIEnv, key: &str) -> JResult<Option<Vec<u8>>> {
+    pub(crate) fn get_binary(&self, env: &mut JNIEnv, key: &str) -> JResult<Option<Vec<u8>>> {
         let Some(b64) = self.get_string(env, key)? else {
             return Ok(None);
         };
@@ -132,7 +144,7 @@ impl SharedPreferences {
         })
     }
 
-    pub fn edit(&self, env: &mut JNIEnv) -> JResult<SharedPreferencesEditor> {
+    pub(crate) fn edit(&self, env: &mut JNIEnv) -> JResult<SharedPreferencesEditor> {
         struct ThisMethod;
         impl Method for ThisMethod {
             type Param = NoParam;
@@ -144,7 +156,7 @@ impl SharedPreferences {
     }
 }
 
-pub struct SharedPreferencesEditor {
+pub(crate) struct SharedPreferencesEditor {
     self_: GlobalRef,
 }
 impl FromValue for SharedPreferencesEditor {
@@ -161,7 +173,7 @@ impl SharedPreferencesEditor {
         ClassDecl("Landroid/content/SharedPreferences$Editor;")
     }
 
-    pub fn put_string(&self, env: &mut JNIEnv, key: &str, value: &str) -> JResult<Self> {
+    pub(crate) fn put_string(&self, env: &mut JNIEnv, key: &str, value: &str) -> JResult<Self> {
         struct ThisMethod<'a>(PhantomData<&'a ()>);
         impl<'a> Method for ThisMethod<'a> {
             type Param = (&'a str, &'a str);
@@ -172,12 +184,12 @@ impl SharedPreferencesEditor {
         ThisMethod::call(&self.self_, env, (key, value))
     }
 
-    pub fn put_binary(&self, env: &mut JNIEnv, key: &str, value: &[u8]) -> JResult<Self> {
+    pub(crate) fn put_binary(&self, env: &mut JNIEnv, key: &str, value: &[u8]) -> JResult<Self> {
         let value = BASE64_STANDARD.encode(value);
         self.put_string(env, key, &value)
     }
 
-    pub fn remove(&self, env: &mut JNIEnv, key: &str) -> JResult<Self> {
+    pub(crate) fn remove(&self, env: &mut JNIEnv, key: &str) -> JResult<Self> {
         struct ThisMethod<'a>(PhantomData<&'a ()>);
         impl<'a> Method for ThisMethod<'a> {
             type Param = &'a str;
@@ -188,7 +200,7 @@ impl SharedPreferencesEditor {
         ThisMethod::call(&self.self_, env, key)
     }
 
-    pub fn commit(&self, env: &mut JNIEnv) -> JResult<bool> {
+    pub(crate) fn commit(&self, env: &mut JNIEnv) -> JResult<bool> {
         struct ThisMethod;
         impl Method for ThisMethod {
             type Param = NoParam;
@@ -200,7 +212,7 @@ impl SharedPreferencesEditor {
     }
 }
 
-pub struct SharedPreferencesKeys {
+pub(crate) struct SharedPreferencesKeys {
     self_: GlobalRef,
 }
 impl FromValue for SharedPreferencesKeys {
@@ -216,7 +228,7 @@ impl SharedPreferencesKeys {
         ClassDecl("Ljava/util/Map;")
     }
 
-    pub fn get_keys(&self, env: &mut JNIEnv) -> JResult<Vec<String>> {
+    pub(crate) fn get_keys(&self, env: &mut JNIEnv) -> JResult<Vec<String>> {
         let mut result = Vec::new();
         let j_map = JMap::from_env(env, self.self_.as_obj())?;
         let mut iterator = j_map.iter(env)?;

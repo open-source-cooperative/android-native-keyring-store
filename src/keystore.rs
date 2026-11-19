@@ -81,15 +81,27 @@ impl KeyStore {
     }
 
     pub(crate) fn get_key(&self, env: &mut JNIEnv<'_>, alias: &str) -> JResult<Option<Key>> {
+        /// The `null` password `getKey` takes, since Keystore entries have none.
+        struct NoPassword;
+        impl ToValue for NoPassword {
+            fn signature() -> SignatureComp {
+                SignatureComp::ArrayChar
+            }
+
+            fn to_value<'a>(&self, _env: &mut JNIEnv<'a>) -> JResult<JValueGen<JObject<'a>>> {
+                Ok(JObject::null().into())
+            }
+        }
+
         struct ThisMethod<'a>(PhantomData<&'a ()>);
         impl<'a> Method for ThisMethod<'a> {
-            type Param = (&'a str, Option<Vec<u16>>);
+            type Param = (&'a str, NoPassword);
             type Return = Option<Key>;
 
             const NAME: &'static str = "getKey";
         }
 
-        ThisMethod::call(&self.self_, env, (alias, None))
+        ThisMethod::call(&self.self_, env, (alias, NoPassword))
     }
 
     pub(crate) fn delete_entry(&self, env: &mut JNIEnv<'_>, alias: &str) -> JResult<()> {
@@ -106,7 +118,7 @@ impl KeyStore {
 }
 
 #[derive(Debug, Clone)]
-pub struct Key {
+pub(crate) struct Key {
     self_: GlobalRef,
 }
 
@@ -136,7 +148,7 @@ impl Key {
     }
 }
 
-pub struct SecretKey {
+pub(crate) struct SecretKey {
     self_: GlobalRef,
 }
 
@@ -155,7 +167,7 @@ impl SecretKey {
         ClassDecl("Ljavax/crypto/SecretKey;")
     }
 
-    pub fn get_encoded(&self, env: &mut JNIEnv) -> JResult<Vec<u8>> {
+    pub(crate) fn get_encoded(&self, env: &mut JNIEnv) -> JResult<Vec<u8>> {
         struct ThisMethod;
         impl Method for ThisMethod {
             type Param = NoParam;
@@ -168,7 +180,7 @@ impl SecretKey {
     }
 }
 
-pub struct SecretKeySpec {
+pub(crate) struct SecretKeySpec {
     self_: GlobalRef,
 }
 
@@ -187,7 +199,7 @@ impl SecretKeySpec {
         ClassDecl("Ljavax/crypto/spec/SecretKeySpec;")
     }
 
-    pub fn new(env: &mut JNIEnv, key: &[u8], algorithm: &str) -> JResult<Self> {
+    pub(crate) fn new(env: &mut JNIEnv, key: &[u8], algorithm: &str) -> JResult<Self> {
         struct ThisMethod<'a>(PhantomData<&'a ()>);
         impl<'a> Constructible for ThisMethod<'a> {
             type Param = (&'a [u8], &'a str);
