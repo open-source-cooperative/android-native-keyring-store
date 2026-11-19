@@ -41,6 +41,10 @@ if [ "$qemu" != "1" ]; then
   exit 1
 fi
 
+# A slow launcher's ANR dialog would take the window focus that starts the unlock tests.
+device shell settings put global hide_error_dialogs 1
+device shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS > /dev/null
+
 # Without `--old`, `set-pin` refuses an existing lock credential.
 device shell locksettings set-pin "$pin"
 owned=1
