@@ -1,5 +1,7 @@
 //! Object results are owned before each local reference frame is released.
 
+use std::marker::PhantomData;
+
 use jni::{
     JNIEnv,
     objects::{GlobalRef, JByteArray, JObject, JValue, JValueGen, JValueOwned},
@@ -90,6 +92,23 @@ pub(crate) trait StaticMethod {
             Self::Return::from_return(r, env)
         })
     }
+}
+
+/// Calls the static `getInstance(String)` factory of `class`.
+pub(crate) fn get_instance<R: FromValue>(
+    class: ClassDecl,
+    env: &mut JNIEnv,
+    name: &str,
+) -> JResult<R> {
+    struct GetInstance<'a, R>(PhantomData<(&'a (), R)>);
+    impl<'a, R: FromValue> StaticMethod for GetInstance<'a, R> {
+        type Param = &'a str;
+        type Return = R;
+
+        const NAME: &'static str = "getInstance";
+    }
+
+    <GetInstance<'_, R> as StaticMethod>::call(class, env, name)
 }
 
 pub(crate) trait Constructible {
